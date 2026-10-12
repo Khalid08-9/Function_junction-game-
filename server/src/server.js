@@ -21,6 +21,8 @@ app.use(session({
 }))
 
 app.use("/api/auth", require("./routes/authRoutes"));
+app.use("/api/sessions", require("./routes/sessionRoutes"));
+app.use("/api/questions", require("./routes/questionRoutes"));
 
 app.get("/", (req, res) => {
     res.json({
