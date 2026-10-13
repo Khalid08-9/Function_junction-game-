@@ -18,18 +18,18 @@ app.use(session({
         httpOnly: true,
         maxAge: 60 * 60 * 1000
     }
-}))
+}));
 
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/sessions", require("./routes/sessionRoutes"));
 app.use("/api/questions", require("./routes/questionRoutes"));
+app.use("/api/game", require("./routes/gameRoutes"));
 
 app.get("/", (req, res) => {
     res.json({
         message: "Function Junction backend is running"
     });
 });
-
 
 async function startServer() {
     console.log("Starting Function Junction server...");
@@ -41,7 +41,7 @@ async function startServer() {
         console.log("Database connected successfully");
 
         app.listen(port, () => {
-            console.log(`SerstartServerver running at http://localhost:${port}`);
+            console.log(`Server running at http://localhost:${port}`);
         });
     } catch (error) {
         console.error("Database connection failed:", error.message);

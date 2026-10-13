@@ -1,16 +1,15 @@
 const pool = require("../config/database");
 
+// A student scans a card. We find one active question for that card.
+// IMPORTANT: we never send is_correct or explanation here.
 async function getQuestionByToken(req, res) {
     const qrToken = req.params.qrToken;
 
     if (typeof qrToken !== "string" || !qrToken.trim() || qrToken.length > 100) {
-        return res.status(400).json({
-            message: "A valid QR token is required."
-        });
+        return res.status(400).json({ message: "A valid QR token is required." });
     }
 
     try {
-        // 1. Find the card and one random active question for it
         const [rows] = await pool.execute(
             `SELECT c.card_id, c.card_name, c.card_effect,
                     q.question_id, q.topic, q.question_text
@@ -32,7 +31,6 @@ async function getQuestionByToken(req, res) {
 
         const question = rows[0];
 
-        // 2. Get the options WITHOUT is_correct
         const [options] = await pool.execute(
             `SELECT option_id, option_label, option_text
              FROM question_options
