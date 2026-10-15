@@ -1,0 +1,139 @@
+const pool = require("../config/database");
+
+// GET /api/game/sessions/:sessionId/summary  (lecturer who owns the session)
+async function getSummary(req, res) {
+    const sessionId = Number(req.params.sessionId);
+    const lecturerId = req.session.user.user_id;
+
+    if (!Number.isInteger(sessionId) || sessionId < 1) {
+        return res.status(400).json({
+            message: "Session ID must be a positive whole number."
+        });
+    }
+
+    try {
+        const [sessions] = await pool.execute(
+            `SELECT session_id, session_code, status, started_at, ended_at
+             FROM game_sessions
+             WHERE session_id = ? AND lecturer_id = ?`,
+            [sessionId, lecturerId]
+        );
+
+        if (sessions.length === 0) {
+            return res.status(404).json({ message: "Session not found." });
+        }
+
+        const [[players]] = await pool.execute(
+            `SELECT COUNT(*) AS total
+             FROM team_members tm
+             JOIN teams t ON t.team_id = tm.team_id
+             WHERE t.session_id = ?`,
+            [sessionId]
+        );
+
+        const [[answers]] = await pool.execute(
+            `SELECT COUNT(*) AS total, COALESCE(SUM(is_correct), 0) AS correct
+             FROM attempts WHERE session_id = ?`,
+            [sessionId]
+        );
+
+        const [teams] = await pool.execute(
+            `SELECT team_id, team_name, team_colour, current_score
+             FROM teams
+             WHERE session_id = ?
+             ORDER BY current_score DESC, team_id`,
+            [sessionId]
+        );
+
+        const [recent] = await pool.execute(
+            `SELECT a.attempt_id, u.full_name, t.team_name, a.is_correct,
+                    a.response_seconds, a.answered_at,
+                    COALESCE(se.points_change, 0) AS points
+             FROM attempts a
+             JOIN users u ON u.user_id = a.user_id
+             JOIN teams t ON t.team_id = a.team_id
+             LEFT JOIN score_event se ON se.attempt_id = a.attempt_id
+             WHERE a.session_id = ?
+             ORDER BY a.attempt_id DESC
+             LIMIT 10`,
+            [sessionId]
+        );
+
+        // The question students found hardest (lowest share of correct answers)
+        const [hardest] = await pool.execute(
+            `SELECT a.question_id, q.topic,
+                    COUNT(*) AS attempts, SUM(a.is_correct) AS correct
+             FROM attempts a
+             JOIN questions q ON q.question_id = a.question_id
+             WHERE a.session_id = ?
+             GROUP BY a.question_id, q.topic
+             ORDER BY SUM(a.is_correct) / COUNT(*) ASC, COUNT(*) DESC, a.question_id
+             LIMIT 1`,
+            [sessionId]
+        );
+
+        const [top] = await pool.execute(
+            `SELECT a.user_id, u.full_name, SUM(a.is_correct) AS correct_answers
+             FROM attempts a
+             JOIN users u ON u.user_id = a.user_id
+             WHERE a.session_id = ?
+             GROUP BY a.user_id, u.full_name
+             HAVING SUM(a.is_correct) > 0
+             ORDER BY SUM(a.is_correct) DESC, a.user_id
+             LIMIT 1`,
+            [sessionId]
+        );
+
+        const totalAnswers = Number(answers.total);
+        const correctAnswers = Number(answers.correct);
+        const hasLeader = teams.length > 0 && teams[0].current_score > 0;
+
+        return res.status(200).json({
+            session: sessions[0],
+            students: Number(players.total),
+            answers: totalAnswers,
+            correct_answers: correctAnswers,
+            accuracy_percent: totalAnswers
+                ? Math.round((correctAnswers * 100) / totalAnswers)
+                : null,
+            leading_team: hasLeader ? teams[0] : null,
+            is_tie: hasLeader && teams.length > 1 &&
+                    teams[1].current_score === teams[0].current_score,
+            teams,
+            hardest_question: hardest[0]
+                ? {
+                    question_id: hardest[0].question_id,
+                    topic: hardest[0].topic,
+                    attempts: Number(hardest[0].attempts),
+                    success_percent: Math.round(
+                        (Number(hardest[0].correct) * 100) / Number(hardest[0].attempts)
+                    )
+                }
+                : null,
+            top_performer: top[0]
+                ? {
+                    user_id: top[0].user_id,
+                    full_name: top[0].full_name,
+                    correct_answers: Number(top[0].correct_answers)
+                }
+                : null,
+            recent_activity: recent.map((row) => ({
+                attempt_id: row.attempt_id,
+                full_name: row.full_name,
+                team_name: row.team_name,
+                is_correct: row.is_correct === 1,
+                points: row.points,
+                response_seconds: row.response_seconds,
+                answered_at: row.answered_at
+            }))
+        });
+    } catch (error) {
+        console.error("Summary failed:", error.code || error.message);
+
+        return res.status(500).json({
+            message: "Could not load the summary. Please try again."
+        });
+    }
+}
+
+module.exports = { getSummary };

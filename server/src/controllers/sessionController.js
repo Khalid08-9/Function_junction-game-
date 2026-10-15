@@ -1,15 +1,17 @@
 const crypto = require("crypto");
 const pool = require("../config/database");
+const { startGame } = require("../services/turnService");
 
 // Session code settings (no 0, O, 1, I because they look alike)
 const CODE_CHARACTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
 const MAX_CODE_ATTEMPTS = 5;
 
-
+// Team settings
 const TEAM_COLOURS = ["Red", "Blue", "Green", "Yellow", "Purple", "Orange"];
 const MAX_TEAM_SIZE = 2;
 
+/* ---------- Create a session (lecturer) ---------- */
 
 function generateSessionCode() {
     let code = "";
@@ -219,7 +221,7 @@ async function joinSession(req, res) {
 /* ---------- Start / finish a session (lecturer) ---------- */
 
 async function changeSessionStatus(req, res, rule) {
-    const { fromStatus, toStatus, timeColumn, successMessage } = rule;
+    const { fromStatus, toStatus, timeColumn, successMessage, afterChange } = rule;
     const sessionId = Number(req.params.sessionId);
     const lecturerId = req.session.user.user_id;
 
@@ -229,9 +231,14 @@ async function changeSessionStatus(req, res, rule) {
         });
     }
 
+    let connection;
+
     try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+
         // Works only if: session exists + belongs to this lecturer + right status
-        const [result] = await pool.execute(
+        const [result] = await connection.execute(
             `UPDATE game_sessions
              SET status = ?, ${timeColumn} = NOW()
              WHERE session_id = ? AND lecturer_id = ? AND status = ?`,
@@ -239,6 +246,17 @@ async function changeSessionStatus(req, res, rule) {
         );
 
         if (result.affectedRows === 1) {
+            // Extra work that must succeed together with the status change.
+            // It returns a message if something is wrong, or null if all is fine.
+            const problem = afterChange ? await afterChange(connection, sessionId) : null;
+
+            if (problem) {
+                await connection.rollback();
+                return res.status(409).json({ message: problem });
+            }
+
+            await connection.commit();
+
             return res.status(200).json({
                 message: successMessage,
                 session: { session_id: sessionId, status: toStatus }
@@ -246,6 +264,8 @@ async function changeSessionStatus(req, res, rule) {
         }
 
         // Nothing changed: find out why
+        await connection.rollback();
+
         const [rows] = await pool.execute(
             `SELECT lecturer_id, status FROM game_sessions WHERE session_id = ?`,
             [sessionId]
@@ -259,11 +279,19 @@ async function changeSessionStatus(req, res, rule) {
             message: `The session is "${rows[0].status}", so this action is not allowed.`
         });
     } catch (error) {
+        if (connection) {
+            await connection.rollback();
+        }
+
         console.error("Change session status failed:", error.code || error.message);
 
         return res.status(500).json({
             message: "Could not update the session. Please try again."
         });
+    } finally {
+        if (connection) {
+            connection.release();
+        }
     }
 }
 
@@ -272,7 +300,12 @@ function startSession(req, res) {
         fromStatus: "waiting",
         toStatus: "active",
         timeColumn: "started_at",
-        successMessage: "Session started."
+        successMessage: "Session started.",
+        // Make round 1 with a random player order
+        afterChange: async (connection, sessionId) => {
+            const firstPlayer = await startGame(connection, sessionId);
+            return firstPlayer ? null : "No players have joined this session yet.";
+        }
     });
 }
 

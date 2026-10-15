@@ -1,12 +1,33 @@
 const pool = require("../config/database");
+const { canViewSession } = require("../utils/sessionAccess");
 
-const POINTS_FOR_CORRECT = 10; // wrong answers give 0 and never remove points
+// Points for a correct answer depend on the card's difficulty.
+// Wrong answers give 0 and never remove points.
+const POINTS_BY_DIFFICULTY = {
+    low: 5,
+    medium: 10,
+    high: 15,
+    advanced: 20
+};
+const DEFAULT_POINTS = 10; // used only if a card has an unknown difficulty
 const MAX_RESPONSE_SECONDS = 3600;
+
+function pointsForDifficulty(difficulty) {
+    const key = String(difficulty || "").trim().toLowerCase();
+
+    if (!(key in POINTS_BY_DIFFICULTY)) {
+        console.warn("Unknown card difficulty:", difficulty);
+        return DEFAULT_POINTS;
+    }
+
+    return POINTS_BY_DIFFICULTY[key];
+}
 
 function isPositiveInteger(value) {
     return Number.isInteger(value) && value > 0;
 }
 
+/* ---------- Submit an answer (student) ---------- */
 
 async function submitAnswer(req, res) {
     const sessionId = Number(req.body.session_id);
@@ -91,9 +112,18 @@ async function submitAnswer(req, res) {
             });
         }
 
+        // Card details: explanation, actions and difficulty (for the points)
+        const [[info]] = await connection.execute(
+            `SELECT q.explanation, c.full_action, c.basic_action, c.difficulty
+             FROM questions q
+             JOIN cards c ON c.card_id = q.card_id
+             WHERE q.question_id = ?`,
+            [questionId]
+        );
+
         // The SERVER decides if the answer is correct, never the browser
         const isCorrect = options[0].is_correct === 1;
-        const points = isCorrect ? POINTS_FOR_CORRECT : 0;
+        const points = isCorrect ? pointsForDifficulty(info.difficulty) : 0;
 
         // 5. Save the attempt
         const [attempt] = await connection.execute(
@@ -120,15 +150,7 @@ async function submitAnswer(req, res) {
             );
         }
 
-        // 7. Collect what the result screen needs
-        const [[info]] = await connection.execute(
-            `SELECT q.explanation, c.full_action, c.basic_action
-             FROM questions q
-             JOIN cards c ON c.card_id = q.card_id
-             WHERE q.question_id = ?`,
-            [questionId]
-        );
-
+        // 7. Collect the rest of what the result screen needs
         const [[correctOption]] = await connection.execute(
             `SELECT option_id, option_label, option_text
              FROM question_options
@@ -169,7 +191,6 @@ async function submitAnswer(req, res) {
     }
 }
 
-/* ---------- Leaderboard (owner lecturer or a member student) ---------- */
 
 async function getLeaderboard(req, res) {
     const sessionId = Number(req.params.sessionId);
@@ -182,21 +203,7 @@ async function getLeaderboard(req, res) {
     }
 
     try {
-        const [allowed] = await pool.execute(
-            `SELECT gs.session_id
-             FROM game_sessions gs
-             WHERE gs.session_id = ?
-               AND (gs.lecturer_id = ?
-                    OR EXISTS (
-                        SELECT 1
-                        FROM teams t
-                        JOIN team_members tm ON tm.team_id = t.team_id
-                        WHERE t.session_id = gs.session_id AND tm.user_id = ?
-                    ))`,
-            [sessionId, userId, userId]
-        );
-
-        if (allowed.length === 0) {
+        if (!(await canViewSession(sessionId, userId))) {
             return res.status(404).json({ message: "Session not found." });
         }
 
