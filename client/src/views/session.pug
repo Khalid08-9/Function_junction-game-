@@ -1,0 +1,48 @@
+extends layout
+
+block content
+  section.card#session-page(data-session-id=session.session_id, data-status=session.status, data-signature=session.status + ":" + totalPlayers)
+    p.label Session code
+    p.code-box= session.session_code
+    p
+      span.badge(class="badge-" + session.status)= session.status
+      span.hint #{totalPlayers} players joined
+
+    if isOwner
+      if session.status === "waiting"
+        button.btn(type="button", data-action="start", disabled=(totalPlayers === 0)) Start game
+        p.hint Students can join with the code until you start.
+      else if session.status === "active"
+        button.btn.btn-pink(type="button", data-action="finish") Finish game
+        p.hint The game room page is the next step we will build.
+      else
+        p.hint This game has finished.
+    else
+      if session.status === "waiting"
+        p.hint Waiting for the lecturer to start the game. This page updates by itself.
+      else if session.status === "active"
+        p.hint The game has started. The game room page is the next step we will build.
+      else
+        p.hint This game has finished.
+
+    p#form-message.message(role="alert", hidden)
+
+  if teams.length === 0
+    section.card
+      p.hint Nobody has joined yet.
+  else
+    section.team-grid
+      each team in teams
+        article.team-card(data-colour=team.team_colour.toLowerCase())
+          h2= team.team_name
+          p.score Score: #{team.current_score}
+          ul.members
+            if team.members.length === 0
+              li.empty No players yet
+            each member in team.members
+              li(class=(member.user_id === currentUser.user_id ? "me" : null))
+                span.seat Seat #{member.seat_number}
+                span= member.full_name
+
+block scripts
+  script(src="/js/session.js")

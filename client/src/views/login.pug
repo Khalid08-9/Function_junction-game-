@@ -1,0 +1,21 @@
+extends layout
+
+block content
+  section.card.narrow
+    img.hero-logo(src="/images/logo.svg", alt="Function Junction logo", width="96", height="96")
+    h1.title Welcome back
+    p.subtitle Sign in to enter your classroom game
+    form#login-form(novalidate)
+      .field
+        label(for="email") Email
+        input#email(type="email", name="email", autocomplete="email", required)
+      .field
+        label(for="password") Password
+        input#password(type="password", name="password", autocomplete="current-password", required)
+      p#form-message.message(role="alert", hidden)
+      button.btn(type="submit") Sign in
+    p.hint New player? #[a(href="/register") Create an account]
+    p.hint Lecturer? #[a(href="/register-lecturer") Sign up with an invite code]
+
+block scripts
+  script(src="/js/login.js")

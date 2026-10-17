@@ -1,0 +1,27 @@
+extends layout
+
+block content
+  section.card.narrow
+    h1.title= isLecturer ? "Lecturer sign-up" : "Create an account"
+    p.subtitle= isLecturer ? "You need the secret invite code." : "Join the classroom game as a student."
+    form#register-form(novalidate, data-endpoint=endpoint)
+      .field
+        label(for="full_name") Full name
+        input#full_name(type="text", name="full_name", maxlength="100", autocomplete="name", required)
+      .field
+        label(for="email") Email
+        input#email(type="email", name="email", autocomplete="email", required)
+      .field
+        label(for="password") Password
+        input#password(type="password", name="password", minlength="8", autocomplete="new-password", required)
+        small.hint At least 8 characters.
+      if isLecturer
+        .field
+          label(for="invite_code") Invite code
+          input#invite_code(type="password", name="invite_code", autocomplete="off", required)
+      p#form-message.message(role="alert", hidden)
+      button.btn(type="submit")= isLecturer ? "Register as lecturer" : "Create account"
+    p.hint Already have an account? #[a(href="/login") Sign in]
+
+block scripts
+  script(src="/js/register.js")

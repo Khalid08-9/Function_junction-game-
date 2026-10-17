@@ -58,10 +58,11 @@ async function submitAnswer(req, res) {
         // 1. Is this student in a team of this session? (row is locked, so
         //    two quick submits cannot both pass the checks below)
         const [members] = await connection.execute(
-            `SELECT tm.team_id, gs.status
+            `SELECT tm.team_id, gs.status, st.current_team_id
              FROM team_members tm
              JOIN teams t ON t.team_id = tm.team_id
              JOIN game_sessions gs ON gs.session_id = t.session_id
+             LEFT JOIN game_state st ON st.session_id = t.session_id
              WHERE t.session_id = ? AND tm.user_id = ?
              FOR UPDATE`,
             [sessionId, userId]
@@ -74,12 +75,20 @@ async function submitAnswer(req, res) {
             });
         }
 
-        const { team_id: teamId, status } = members[0];
+        const { team_id: teamId, status, current_team_id: currentTeamId } = members[0];
 
         // 2. The game must be running
         if (status !== "active") {
             await connection.rollback();
             return res.status(409).json({ message: "This session is not active." });
+        }
+
+        // 2b. Only the team whose turn it is can answer (any teammate may answer)
+        if (currentTeamId !== teamId) {
+            await connection.rollback();
+            return res.status(403).json({
+                message: "It is not your team's turn."
+            });
         }
 
         // 3. One answer per student per question in a session
@@ -191,6 +200,7 @@ async function submitAnswer(req, res) {
     }
 }
 
+/* ---------- Leaderboard (owner lecturer or a member student) ---------- */
 
 async function getLeaderboard(req, res) {
     const sessionId = Number(req.params.sessionId);

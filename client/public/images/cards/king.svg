@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" role="img" aria-label="King strong card">
+  <rect x="4" y="4" width="192" height="272" rx="18" fill="#faecd0" stroke="#ffc83d" stroke-width="6"/>
+  <text x="20" y="40" font-family="Arial Black, Impact, Arial, sans-serif" font-size="26" fill="#d81b60">K</text>
+  <g transform="rotate(180 100 140)"><text x="20" y="40" font-family="Arial Black, Impact, Arial, sans-serif" font-size="26" fill="#d81b60">K</text></g>
+  <rect x="62" y="16" width="76" height="22" rx="11" fill="#2d1450"/>
+  <text x="100" y="32" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="11" fill="#ffc83d">MEDIUM</text>
+  <text x="100" y="170" text-anchor="middle" font-family="Arial Black, Impact, Arial, sans-serif" font-size="120" fill="#d81b60">K</text>
+  <text x="100" y="214" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="15" fill="#2b1a14">PLOUGH 13</text>
+  <text x="100" y="252" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="11" fill="#1abc9c">SCAN TO UNLOCK</text>
+</svg>

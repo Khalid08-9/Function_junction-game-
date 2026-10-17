@@ -1,0 +1,28 @@
+doctype html
+html(lang="en")
+  head
+    meta(charset="utf-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1")
+    title= pageTitle ? pageTitle + " | Function Junction" : "Function Junction"
+    link(rel="icon", href="/images/favicon.svg", type="image/svg+xml")
+    link(rel="stylesheet", href="/css/style.css")
+  body
+    .card-ribbon(aria-hidden="true")
+      each colour in ["green", "red", "blue", "yellow", "pink", "red"]
+        span(class="ribbon-card ribbon-" + colour)
+    header.site-header
+      a.brand(href="/")
+        img.brand-logo(src="/images/logo.svg", alt="", width="36", height="36")
+        span Function Junction
+      .header-tools
+        button#sound-toggle.icon-button(type="button", aria-label="Turn sound off")
+          img(src="/images/icons/sound-on.svg", alt="", width="24", height="24")
+        if currentUser
+          .user-box
+            span.user-name= currentUser.full_name
+            span.role-tag= currentUser.role
+            button#logout-button.btn.btn-small.btn-pink(type="button") Log out
+    main.page
+      block content
+    script(src="/js/common.js")
+    block scripts

@@ -1,0 +1,24 @@
+extends layout
+
+block content
+  section.card
+    h1.title Your sessions
+    p.subtitle Create a session, then share its code with your students.
+    p#form-message.message(role="alert", hidden)
+    button#create-session.btn(type="button") Create new session
+
+  section.card
+    if sessions.length === 0
+      p.hint You have no sessions yet.
+    else
+      ul.list
+        each item in sessions
+          li.list-row
+            div
+              strong.code= item.session_code
+              span.hint #{item.player_count} players, #{item.team_count} teams
+            span.badge(class="badge-" + item.status)= item.status
+            a.btn.btn-small(href="/sessions/" + item.session_id) Open
+
+block scripts
+  script(src="/js/lecturer-home.js")

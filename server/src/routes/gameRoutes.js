@@ -4,12 +4,16 @@ const router = express.Router();
 const { requireLogin, requireRole } = require("../middleware/authMiddleware");
 const { submitAnswer, getLeaderboard } = require("../controllers/gameController");
 const { getTurnState, endTurn } = require("../controllers/turnController");
+const { getSummary } = require("../controllers/dashboardController");
 
 // Student only
 router.post("/answers", requireLogin, requireRole("student"), submitAnswer);
 
 // Lecturer who owns the session, or a student in it
 router.get("/sessions/:sessionId/leaderboard", requireLogin, getLeaderboard);
+
+// Lecturer dashboard (lecturer who owns the session)
+router.get("/sessions/:sessionId/summary", requireLogin, requireRole("lecturer"), getSummary);
 
 // Turns: who plays now? (lecturer who owns the session, or a student in it)
 router.get("/sessions/:sessionId/turn", requireLogin, getTurnState);

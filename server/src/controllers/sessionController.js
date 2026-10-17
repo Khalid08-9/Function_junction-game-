@@ -7,8 +7,11 @@ const CODE_CHARACTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
 const MAX_CODE_ATTEMPTS = 5;
 
-// Team settings
-const TEAM_COLOURS = ["Red", "Blue", "Green", "Yellow", "Purple", "Orange"];
+// Every session has exactly these two teams. A student chooses one when joining.
+const TEAMS = [
+    { name: "Team 1", colour: "Red" },
+    { name: "Team 2", colour: "Blue" }
+];
 const MAX_TEAM_SIZE = 2;
 
 /* ---------- Create a session (lecturer) ---------- */
@@ -23,19 +26,39 @@ function generateSessionCode() {
     return code;
 }
 
+// Both teams are created together with the session,
+// so students can choose between them.
+async function createDefaultTeams(connection, sessionId) {
+    for (const team of TEAMS) {
+        await connection.execute(
+            `INSERT INTO teams (session_id, team_name, team_colour)
+             VALUES (?, ?, ?)`,
+            [sessionId, team.name, team.colour]
+        );
+    }
+}
+
 async function createSession(req, res) {
     const lecturerId = req.session.user.user_id;
+    let connection;
 
     try {
+        connection = await pool.getConnection();
+
         for (let attempt = 1; attempt <= MAX_CODE_ATTEMPTS; attempt++) {
             const sessionCode = generateSessionCode();
 
+            await connection.beginTransaction();
+
             try {
-                const [result] = await pool.execute(
+                const [result] = await connection.execute(
                     `INSERT INTO game_sessions (lecturer_id, session_code)
                      VALUES (?, ?)`,
                     [lecturerId, sessionCode]
                 );
+
+                await createDefaultTeams(connection, result.insertId);
+                await connection.commit();
 
                 return res.status(201).json({
                     message: "Session created successfully.",
@@ -46,6 +69,8 @@ async function createSession(req, res) {
                     }
                 });
             } catch (error) {
+                await connection.rollback();
+
                 // Code already exists: try again with a new code
                 if (error.code !== "ER_DUP_ENTRY") {
                     throw error;
@@ -62,6 +87,10 @@ async function createSession(req, res) {
         return res.status(500).json({
             message: "Could not create the session. Please try again."
         });
+    } finally {
+        if (connection) {
+            connection.release();
+        }
     }
 }
 
@@ -81,43 +110,42 @@ async function isAlreadyInSession(connection, sessionId, userId) {
     return rows.length > 0;
 }
 
-async function findOpenTeam(connection, sessionId) {
+// Finds "Team 1" or "Team 2" of the session. (Sessions made before teams were
+// created automatically may miss one, so we create it when needed.)
+async function findOrCreateTeam(connection, sessionId, teamNumber) {
+    const wanted = TEAMS[teamNumber - 1];
+
     const [rows] = await connection.execute(
-        `SELECT t.team_id, t.team_name, t.team_colour
-         FROM teams t
-         LEFT JOIN team_members tm ON tm.team_id = t.team_id
-         WHERE t.session_id = ?
-         GROUP BY t.team_id, t.team_name, t.team_colour
-         HAVING COUNT(tm.team_member_id) < ?
-         ORDER BY t.team_id
-         LIMIT 1`,
-        [sessionId, MAX_TEAM_SIZE]
+        `SELECT team_id, team_name, team_colour
+         FROM teams
+         WHERE session_id = ? AND team_name = ?`,
+        [sessionId, wanted.name]
     );
 
-    return rows[0] || null;
-}
-
-async function createTeam(connection, sessionId) {
-    const [countRows] = await connection.execute(
-        `SELECT COUNT(*) AS total FROM teams WHERE session_id = ?`,
-        [sessionId]
-    );
-
-    const teamNumber = Number(countRows[0].total) + 1;
-    const teamName = `Team ${teamNumber}`;
-    const teamColour = TEAM_COLOURS[(teamNumber - 1) % TEAM_COLOURS.length];
+    if (rows.length > 0) {
+        return rows[0];
+    }
 
     const [result] = await connection.execute(
         `INSERT INTO teams (session_id, team_name, team_colour)
          VALUES (?, ?, ?)`,
-        [sessionId, teamName, teamColour]
+        [sessionId, wanted.name, wanted.colour]
     );
 
     return {
         team_id: result.insertId,
-        team_name: teamName,
-        team_colour: teamColour
+        team_name: wanted.name,
+        team_colour: wanted.colour
     };
+}
+
+async function countMembers(connection, teamId) {
+    const [rows] = await connection.execute(
+        `SELECT COUNT(*) AS total FROM team_members WHERE team_id = ?`,
+        [teamId]
+    );
+
+    return Number(rows[0].total);
 }
 
 async function findFreeSeat(connection, teamId) {
@@ -142,6 +170,13 @@ async function joinSession(req, res) {
 
     if (typeof session_code !== "string" || !session_code.trim()) {
         return res.status(400).json({ message: "Session code is required." });
+    }
+
+    // The student chooses team 1 or team 2
+    const teamNumber = Number(req.body.team_number);
+
+    if (!Number.isInteger(teamNumber) || teamNumber < 1 || teamNumber > TEAMS.length) {
+        return res.status(400).json({ message: "Choose Team 1 or Team 2." });
     }
 
     const code = session_code.trim().toUpperCase();
@@ -182,9 +217,14 @@ async function joinSession(req, res) {
             });
         }
 
-        const team =
-            (await findOpenTeam(connection, session.session_id)) ||
-            (await createTeam(connection, session.session_id));
+        const team = await findOrCreateTeam(connection, session.session_id, teamNumber);
+
+        if ((await countMembers(connection, team.team_id)) >= MAX_TEAM_SIZE) {
+            await connection.rollback();
+            return res.status(409).json({
+                message: `${team.team_name} is full. Choose the other team.`
+            });
+        }
 
         const seatNumber = await findFreeSeat(connection, team.team_id);
 

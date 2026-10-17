@@ -1,0 +1,35 @@
+extends layout
+block content
+  section.card.narrow
+    h1.title Join your class
+    p.subtitle Enter the code shown by your lecturer
+    form#join-form(novalidate)
+      .field
+        label(for="session_code") Session code
+        input#session_code.code-input(type="text", name="session_code", maxlength="12", autocomplete="off", autocapitalize="characters", required)
+      fieldset.team-choice
+        legend Choose your team
+        .team-options
+          label.team-option
+            input(type="radio", name="team_number", value="1")
+            span.team-pill.team-red Team 1
+          label.team-option
+            input(type="radio", name="team_number", value="2")
+            span.team-pill.team-blue Team 2
+      p#form-message.message(role="alert", hidden)
+      button.btn(type="submit") Join game
+
+  if sessions.length > 0
+    section.card
+      h2.title Your sessions
+      ul.list
+        each item in sessions
+          li.list-row
+            div
+              strong.code= item.session_code
+              span.hint= item.team_name
+            span.badge(class="badge-" + item.status)= item.status
+            a.btn.btn-small(href="/sessions/" + item.session_id) Open
+
+block scripts
+  script(src="/js/student-home.js")

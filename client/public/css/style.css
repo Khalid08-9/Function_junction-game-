@@ -1,0 +1,487 @@
+/* Function Junction - plain CSS (no framework).
+   Colours come from the storyboards. Written mobile-first:
+   the base styles are for phones, the @media block at the end is for desktop. */
+
+:root {
+    --bg: #170d29;
+    --bg-soft: #2d1450;
+    --maroon: #7b2d3b;
+    --cream: #f5deb3;
+    --cream-soft: #faecd0;
+    --gold: #ffc83d;
+    --teal: #1abc9c;
+    --pink: #d81b60;
+    --green: #2ecc40;
+    --ink: #2b1a14;
+    --white: #ffffff;
+    --radius: 16px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--white);
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.5;
+}
+
+a {
+    color: var(--gold);
+}
+
+/* ---------- Top ribbon of coloured cards ---------- */
+.card-ribbon {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px 0;
+}
+
+.ribbon-card {
+    width: 38px;
+    height: 24px;
+    border-radius: 6px;
+    transform: rotate(-4deg);
+}
+
+.ribbon-card:nth-child(even) {
+    transform: rotate(4deg);
+}
+
+.ribbon-green { background: #34c84a; }
+.ribbon-red { background: #e53935; }
+.ribbon-blue { background: #1e90e6; }
+.ribbon-yellow { background: #f5c52b; }
+.ribbon-pink { background: var(--pink); }
+
+/* ---------- Header ---------- */
+.site-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 16px;
+}
+
+.brand {
+    color: var(--gold);
+    font-size: 1.5rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-decoration: none;
+}
+
+.user-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.role-tag {
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--bg-soft);
+    border: 1px solid var(--gold);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+/* ---------- Layout ---------- */
+.page {
+    display: grid;
+    gap: 16px;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 8px 16px 40px;
+}
+
+.card {
+    background: var(--cream);
+    color: var(--ink);
+    border: 3px solid var(--gold);
+    border-radius: var(--radius);
+    padding: 20px;
+}
+
+.card.narrow {
+    width: 100%;
+    max-width: 440px;
+    margin: 0 auto;
+}
+
+.title {
+    margin: 0 0 4px;
+    color: var(--pink);
+    font-size: 1.6rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.subtitle {
+    margin: 0 0 16px;
+}
+
+.label {
+    margin: 0;
+    color: var(--pink);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.hint {
+    margin: 8px 0 0;
+    font-size: 0.9rem;
+}
+
+.hint a {
+    color: var(--pink);
+    font-weight: 700;
+}
+
+/* ---------- Forms ---------- */
+.field {
+    display: grid;
+    gap: 4px;
+    margin-bottom: 14px;
+}
+
+.field label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--gold);
+    border-radius: 12px;
+    background: var(--bg-soft);
+    color: var(--white);
+    font: inherit;
+}
+
+input:focus-visible,
+.btn:focus-visible,
+a:focus-visible {
+    outline: 3px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.code-input {
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: 900;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+    display: inline-block;
+    padding: 12px 22px;
+    border: 2px solid var(--gold);
+    border-radius: 12px;
+    background: var(--teal);
+    color: var(--white);
+    font: inherit;
+    font-weight: 900;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-pink {
+    background: var(--pink);
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+}
+
+/* ---------- Messages and badges ---------- */
+.message {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+.message[hidden] {
+    display: none;
+}
+
+.message.error {
+    background: #fde0ea;
+    border: 2px solid var(--pink);
+    color: #8a0b3a;
+}
+
+.message.success {
+    background: #dcf5ec;
+    border: 2px solid var(--teal);
+    color: #0b5c49;
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 12px;
+    border-radius: 999px;
+    color: var(--white);
+    font-size: 0.75rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.badge-waiting { background: #e6a100; }
+.badge-active { background: var(--teal); }
+.badge-finished { background: #777; }
+
+/* ---------- Session code ---------- */
+.code-box {
+    margin: 4px 0 12px;
+    padding: 12px;
+    border: 3px solid var(--teal);
+    border-radius: 12px;
+    background: var(--bg-soft);
+    color: var(--gold);
+    font-size: 2.4rem;
+    font-weight: 900;
+    letter-spacing: 8px;
+    text-align: center;
+}
+
+/* ---------- Lists ---------- */
+.list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.list-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(43, 26, 20, 0.2);
+}
+
+.list-row:last-child {
+    border-bottom: 0;
+}
+
+.list-row .hint {
+    display: block;
+    margin: 0;
+}
+
+.code {
+    letter-spacing: 3px;
+}
+
+/* ---------- Teams ---------- */
+.team-grid {
+    display: grid;
+    gap: 16px;
+}
+
+.team-card {
+    --team: var(--gold);
+    background: var(--cream-soft);
+    color: var(--ink);
+    border: 4px solid var(--team);
+    border-radius: var(--radius);
+    padding: 16px;
+}
+
+.team-card[data-colour="red"] { --team: #e53935; }
+.team-card[data-colour="blue"] { --team: #1e88e5; }
+.team-card[data-colour="green"] { --team: #43a047; }
+.team-card[data-colour="yellow"] { --team: #fdd835; }
+.team-card[data-colour="purple"] { --team: #8e24aa; }
+.team-card[data-colour="orange"] { --team: #fb8c00; }
+
+.team-card h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    text-transform: uppercase;
+}
+
+.score {
+    margin: 0 0 8px;
+    font-weight: 700;
+}
+
+.members {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.members li {
+    display: flex;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: 8px;
+}
+
+.members li.me {
+    background: var(--team);
+    color: var(--white);
+    font-weight: 900;
+}
+
+.seat {
+    min-width: 60px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+
+/* ---------- Logo, icons, sound button ---------- */
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.header-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.icon-button {
+    display: inline-flex;
+    padding: 6px;
+    border: 2px solid var(--gold);
+    border-radius: 999px;
+    background: var(--bg-soft);
+    cursor: pointer;
+}
+
+.icon-button:focus-visible {
+    outline: 3px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.hero-logo {
+    display: block;
+    margin: 0 auto 12px;
+}
+
+/* ---------- Choose a team (join page) ---------- */
+.team-choice {
+    margin: 0 0 14px;
+    padding: 0;
+    border: 0;
+}
+
+.team-choice legend {
+    margin-bottom: 6px;
+    padding: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.team-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.team-option {
+    position: relative;
+}
+
+/* The round button is hidden, but the keyboard can still use it */
+.team-option input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+}
+
+.team-pill {
+    --team: var(--gold);
+    display: block;
+    padding: 12px;
+    border: 3px solid var(--team);
+    border-radius: 12px;
+    background: var(--cream-soft);
+    font-weight: 900;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.team-red { --team: #e53935; }
+.team-blue { --team: #1e88e5; }
+
+.team-option input:checked + .team-pill {
+    background: var(--team);
+    color: var(--white);
+}
+
+.team-option input:focus-visible + .team-pill {
+    outline: 3px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.members li.empty {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.badge + .hint {
+    margin: 0 0 0 8px;
+}
+
+/* ---------- Desktop ---------- */
+@media (min-width: 768px) {
+    .site-header {
+        padding: 18px 32px;
+    }
+
+    .page {
+        padding: 16px 32px 56px;
+    }
+
+    .card {
+        padding: 28px;
+    }
+
+    .team-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .code-box {
+        font-size: 3rem;
+    }
+}
