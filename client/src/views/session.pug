@@ -1,7 +1,7 @@
 extends layout
 
 block content
-  section.card#session-page(data-session-id=session.session_id, data-status=session.status, data-signature=session.status + ":" + totalPlayers)
+  section.card#session-page(data-session-id=session.session_id, data-status=session.status, data-signature=session.status + ":" + totalPlayers, data-game-url=(isOwner ? null : "/sessions/" + session.session_id + "/game"))
     p.label Session code
     p.code-box= session.session_code
     p

@@ -1,0 +1,73 @@
+extends layout
+
+block content
+  section.card(data-session-id=session.session_id)
+    h1.title Lecturer dashboard
+    p.subtitle Session #{session.session_code}
+    p
+      span.badge(class="badge-" + session.status)= session.status
+      if session.started_at
+        |  Started: #{new Date(session.started_at).toLocaleString()}
+      if session.ended_at
+        |  · Ended: #{new Date(session.ended_at).toLocaleString()}
+
+    if summary
+      .dashboard-grid
+        .stat-card
+          p.label Students
+          p.big= summary.students
+        .stat-card
+          p.label Answers
+          p.big= summary.answers
+        .stat-card
+          p.label Accuracy
+          p.big= (summary.accuracy_percent !== null ? summary.accuracy_percent + "%" : "—")
+        .stat-card
+          p.label Leading team
+          p.big= summary.leading_team ? summary.leading_team.team_name : "—"
+          if summary.is_tie
+            p.hint (tie)
+
+      h2.title Team scores
+      ul.list
+        each team in summary.teams
+          li.list-row
+            div
+              strong.code= team.team_name
+              span.hint Score: #{team.current_score}
+            span.badge(class="badge-" + (team.team_colour || "").toLowerCase())= (team.team_colour || "").toUpperCase()
+
+      h2.title Hardest question
+      if summary.hardest_question
+        section.card
+          p.label= summary.hardest_question.topic
+          p.subtitle #{summary.hardest_question.attempts} attempts · #{summary.hardest_question.success_percent}% correct
+      else
+        p.hint No questions attempted yet.
+
+      h2.title Top performer
+      if summary.top_performer
+        section.card
+          p.subtitle= summary.top_performer.full_name
+          p.big= summary.top_performer.correct_answers + " correct answers"
+      else
+        p.hint No top performer yet.
+
+      h2.title Recent activity
+      ul.list
+        if summary.recent_activity.length === 0
+          li.list-row
+            p.hint No activity yet.
+        else
+          each item in summary.recent_activity
+            li.list-row
+              div
+                strong= item.full_name
+                span.hint #{item.team_name} · #{item.response_seconds}s
+              span(class=(item.is_correct ? "badge-active" : "badge-waiting"))= (item.is_correct ? "Correct +" + item.points : "Wrong")
+
+    button#end-session.btn.btn-pink(type="button") End session
+    p#form-message.message(role="alert", hidden)
+
+block scripts
+  script(src="/js/dashboard.js")

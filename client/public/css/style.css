@@ -463,6 +463,334 @@ a:focus-visible {
     margin: 0 0 0 8px;
 }
 
+/* ---------- Game room ---------- */
+.scorebar {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 0 0 12px;
+}
+
+.score-team {
+    --team: var(--gold);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 3px solid var(--team);
+    border-radius: 999px;
+    background: var(--cream-soft);
+    color: var(--ink);
+    font-weight: 900;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+}
+
+.score-team.mine {
+    background: var(--team);
+    color: var(--white);
+    border-color: var(--white);
+}
+
+.score-name { font-size: 0.9rem; }
+.score-value { font-size: 1.1rem; }
+
+.round-info {
+    margin: 0 0 10px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--gold);
+}
+
+.turn-banner {
+    display: block;
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: var(--bg-soft);
+    border: 2px solid var(--gold);
+    color: var(--white);
+    font-weight: 900;
+    text-align: center;
+    font-size: 1rem;
+}
+
+.turn-banner.mine {
+    background: var(--teal);
+    border-color: var(--white);
+    color: var(--white);
+    animation: pulse 1.6s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.75; }
+}
+
+.cards-row {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+    scrollbar-width: none;
+}
+
+.cards-row::-webkit-scrollbar { display: none; }
+
+.strong-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 120px;
+    flex-shrink: 0;
+    padding: 10px 8px;
+    border-radius: 14px;
+    background: var(--cream);
+    border: 3px solid var(--gold);
+}
+
+.card-img {
+    display: block;
+    width: 96px;
+    height: 134px;
+    border-radius: 8px;
+    background: var(--white);
+}
+
+.strong-card figcaption {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    text-align: center;
+    font-size: 0.85rem;
+}
+
+.strong-card strong {
+    font-weight: 900;
+    text-transform: uppercase;
+    color: var(--ink);
+}
+
+.strong-card span {
+    font-size: 0.78rem;
+    color: #5a3a20;
+}
+
+.scanner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 0 0 12px;
+    border: 3px dashed var(--gold);
+    border-radius: 14px;
+    background: var(--bg-soft);
+    min-height: 260px;
+}
+
+.scanner video {
+    width: 100%;
+    max-width: 320px;
+    height: auto;
+    border-radius: 10px;
+    background: #000;
+    display: block;
+}
+
+.scanner-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.question-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 14px;
+}
+
+.timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 10px;
+    background: var(--bg-soft);
+    border: 2px solid var(--gold);
+    font-weight: 900;
+    font-size: 1.1rem;
+    color: var(--white);
+    white-space: nowrap;
+}
+
+.timer.warning {
+    border-color: var(--pink);
+    animation: tickwarn 0.8s infinite;
+    color: var(--pink);
+}
+
+@keyframes tickwarn {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.06); }
+}
+
+.code-block {
+    margin: 10px 0 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--bg-soft);
+    border: 2px solid var(--gold);
+    color: var(--cream);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    overflow-x: auto;
+    white-space: pre-wrap;
+}
+
+.options {
+    display: grid;
+    gap: 8px;
+    margin: 0 0 14px;
+}
+
+.option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 2px solid var(--gold);
+    background: var(--bg-soft);
+    color: var(--white);
+    cursor: pointer;
+}
+
+.option input { margin: 0; width: 18px; height: 18px; }
+
+.option-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: var(--gold);
+    color: var(--ink);
+    font-weight: 900;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.option-text { font-weight: 700; }
+
+/* ---------- Result panel ---------- */
+.result {
+    text-align: center;
+}
+
+.result-icon {
+    margin: 0 0 10px;
+}
+
+.result-title {
+    margin: 0 0 8px;
+    font-size: 1.6rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.result-action,
+.result-points,
+.result-score {
+    margin: 6px 0;
+    font-weight: 800;
+}
+
+.result-answer,
+.result-explanation {
+    margin: 10px 0 0;
+    font-size: 0.95rem;
+}
+
+.result-correct { border-color: var(--green); }
+.result-wrong { border-color: var(--pink); }
+
+/* ---------- Turn order ---------- */
+.order-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.order-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: var(--cream-soft);
+    font-size: 0.9rem;
+}
+
+.order-list li.now { border: 2px solid var(--teal); background: #e8f4f0; }
+.order-list li.played { opacity: 0.55; font-style: italic; }
+
+.order-list li span { display: inline-block; }
+.order-mark {
+    font-size: 0.75rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg-soft);
+    color: var(--gold);
+}
+
+/* ---------- Lecturer dashboard ---------- */
+.dashboard-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 1fr;
+    margin: 12px 0 20px;
+}
+
+.stat-card {
+    --team: var(--gold);
+    background: var(--cream-soft);
+    border: 3px solid var(--team);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    text-align: center;
+}
+
+.stat-card .label {
+    font-size: 0.75rem;
+}
+
+.stat-card .big {
+    display: block;
+    margin: 6px 0 0;
+    font-size: 1.9rem;
+    font-weight: 900;
+    color: var(--ink);
+}
+
 /* ---------- Desktop ---------- */
 @media (min-width: 768px) {
     .site-header {

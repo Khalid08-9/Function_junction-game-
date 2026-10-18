@@ -28,4 +28,13 @@ router.get("/lecturer", requirePageLogin, requirePageRole("lecturer"),
 router.get("/sessions/:sessionId", requirePageLogin,
     asyncHandler(pages.showSession));
 
+// The game room (only while the session is active)
+router.get("/sessions/:sessionId/game", requirePageLogin,
+    asyncHandler(pages.showGame));
+
+// The lecturer dashboard for one session (owner only)
+router.get("/lecturer/sessions/:sessionId/dashboard", requirePageLogin,
+    requirePageRole("lecturer"),
+    asyncHandler(pages.showDashboard));
+
 module.exports = router;

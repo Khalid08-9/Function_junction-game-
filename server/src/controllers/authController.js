@@ -1,6 +1,72 @@
 const bcrypt = require("bcrypt");
 const pool = require("../config/database");
 
+// ---------- Login attempt limiting ----------
+// Stops brute-force guessing by locking an (IP, email) pair after too many
+// failed attempts. Kept in memory; it resets when the server restarts.
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 3 * 60 * 1000; // 15 minutes
+const WINDOW_MS = 3* 60 * 1000;  // attempts expire after 15 minutes
+
+const loginAttempts = new Map();
+
+function clientIp(req) {
+    return (
+        (req.headers["x-forwarded-for"] ||
+         req.socket.remoteAddress ||
+         req.ip ||
+         "unknown").toString().split(",")[0].trim() || "unknown"
+    );
+}
+
+function attemptKey(req, email) {
+    return clientIp(req) + "|" + String(email || "").trim().toLowerCase();
+}
+
+function recordFailedAttempt(req, email) {
+    const key = attemptKey(req, email);
+    const now = Date.now();
+    let entry = loginAttempts.get(key);
+
+    if (!entry || now - entry.firstAttempt > WINDOW_MS) {
+        entry = { firstAttempt: now, count: 0 };
+    }
+
+    entry.count += 1;
+    loginAttempts.set(key, entry);
+
+    return entry.count;
+}
+
+function clearAttempts(req, email) {
+    loginAttempts.delete(attemptKey(req, email));
+}
+
+function isLocked(req, email) {
+    const entry = loginAttempts.get(attemptKey(req, email));
+    if (!entry) {
+        return false;
+    }
+
+    const now = Date.now();
+
+    if (now - entry.firstAttempt > WINDOW_MS) {
+        loginAttempts.delete(attemptKey(req, email));
+        return false;
+    }
+
+    return entry.count >= MAX_ATTEMPTS;
+}
+
+function remainingLockoutMs(req, email) {
+    const entry = loginAttempts.get(attemptKey(req, email));
+    if (!entry) {
+        return 0;
+    }
+
+    return Math.max(0, LOCKOUT_MS - (Date.now() - entry.firstAttempt));
+}
+
 async function register(req, res) {
     const { full_name, email, password } = req.body;
 
@@ -95,6 +161,14 @@ async function login(req, res) {
     // 2. Normalize the email
     const normalizedEmail = email.trim().toLowerCase();
 
+    // 2b. Reject if this (IP, email) is currently locked out
+    if (isLocked(req, normalizedEmail)) {
+        const retryAfter = Math.ceil(remainingLockoutMs(req, normalizedEmail) / 1000);
+        return res.status(429).json({
+            message: "Too many failed login attempts. Try again in " + retryAfter + " seconds."
+        });
+    }
+
     try {
         // 3. Find the user in the database
         const [users] = await pool.execute(
@@ -106,6 +180,7 @@ async function login(req, res) {
 
         // 4. Check whether the user exists
         if (users.length === 0) {
+            recordFailedAttempt(req, normalizedEmail);
             return res.status(401).json({
                 message: "Invalid email or password."
             });
@@ -120,6 +195,7 @@ async function login(req, res) {
         );
 
         if (!passwordMatches) {
+            recordFailedAttempt(req, normalizedEmail);
             return res.status(401).json({
                 message: "Invalid email or password."
             });
@@ -135,7 +211,9 @@ async function login(req, res) {
                 });
             }
 
-            // 7. Store the user information in the session
+            // 7. Clear any failed attempts for this (IP, email), then store the user
+            clearAttempts(req, normalizedEmail);
+
             req.session.user = {
                 user_id: user.user_id,
                 full_name: user.full_name,

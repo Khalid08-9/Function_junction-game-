@@ -39,6 +39,12 @@
             return;
         }
 
+        // A student whose game just started goes straight to the game room
+        if (result.data.session.status === "active" && page.dataset.gameUrl) {
+            FJ.goTo(page.dataset.gameUrl);
+            return;
+        }
+
         const players = result.data.teams.reduce(function (sum, team) {
             return sum + team.members.length;
         }, 0);
