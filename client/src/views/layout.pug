@@ -11,17 +11,23 @@ html(lang="en")
       each colour in ["green", "red", "blue", "yellow", "pink", "red"]
         span(class="ribbon-card ribbon-" + colour)
     header.site-header
-      a.brand(href="/")
-        img.brand-logo(src="/images/logo.svg", alt="", width="36", height="36")
-        span Function Junction
-      .header-tools
-        button#sound-toggle.icon-button(type="button", aria-label="Turn sound off")
-          img(src="/images/icons/sound-on.svg", alt="", width="24", height="24")
-        if currentUser
-          .user-box
-            span.user-name= currentUser.full_name
-            span.role-tag= currentUser.role
-            button#logout-button.btn.btn-small.btn-pink(type="button") Log out
+      .header-inner
+        a.brand(href="/")
+          span.brand-name Function Junction
+          span.brand-sub CODE &bull; CARDS &bull; TEAMWORK
+        nav.header-nav
+          a(href="/play") PLAY
+          a(href="#") HOW TO PLAY
+          a(href="#") LEADERBOARD
+        .header-actions
+          button#sound-toggle.icon-button(type="button", aria-label="Turn sound off")
+            img(src="/images/icons/sound-on.svg", alt="", width="24", height="24")
+          if currentUser
+            .user-box
+              span.user-name= currentUser.full_name
+              button#logout-button.btn.btn-small.btn-pink(type="button") Log out
+            if currentUser.role === "student"
+              a.btn.btn-pink.btn-small(href="/play") STUDENT
     main.page
       block content
     script(src="/js/common.js")
