@@ -1,0 +1,145 @@
+extends layout
+
+block content
+  .mobile-question-container
+    if session
+      .mobile-header-badge
+        span.badge.badge-active Session: #{session.session_code}
+    
+    .card.mobile-question-card
+      .mobile-card-preview
+        img.card-img-small(src=card.image, alt=card.card_name, width="64", height="90")
+        .mobile-card-details
+          h2.mobile-card-title= card.card_name
+          p.mobile-card-effect= card.card_effect
+          span.role-tag Difficulty: #{card.difficulty || 'Normal'}
+
+      .question-head
+        span.label Topic: #{question.topic}
+        #timer.timer
+          img(src="/images/icons/timer.svg", alt="", width="20", height="20")
+          span#timer-text 00:30
+
+      - var parts = question.question_text.split("\n\n")
+      h3#question-title.question-title= parts[0]
+
+      if parts.length > 1
+        pre.code-block= parts.slice(1).join("\n\n")
+
+      form#mobile-answer-form(novalidate)
+        input(type="hidden", name="session_id", value=sessionId)
+        input(type="hidden", name="question_id", value=question.question_id)
+        input(type="hidden", name="team_id", value=teamId)
+        
+        .options#options
+          each opt in question.options
+            label.option
+              input(type="radio", name="selected_option_id", value=opt.option_id, required)
+              span.option-badge= opt.option_label
+              span.option-text= opt.option_text
+
+        button#mobile-submit-btn.btn(type="submit", disabled) Submit Answer to Board
+
+      #mobile-result-box.mobile-result-box(hidden)
+        img#mobile-result-icon.result-icon(src="/images/icons/correct.svg", alt="", width="64", height="64")
+        h2#mobile-result-title.title Result
+        p#mobile-result-text.subtitle
+        p#mobile-result-action.result-action
+        p.hint 🎯 Your answer has been registered on the main board! Watch your ball move around the track!
+
+block scripts
+  script.
+    (function() {
+      const form = document.getElementById("mobile-answer-form");
+      const submitBtn = document.getElementById("mobile-submit-btn");
+      const optionsBox = document.getElementById("options");
+      const timerText = document.getElementById("timer-text");
+      const timerBox = document.getElementById("timer");
+      const resultBox = document.getElementById("mobile-result-box");
+      const resultIcon = document.getElementById("mobile-result-icon");
+      const resultTitle = document.getElementById("mobile-result-title");
+      const resultText = document.getElementById("mobile-result-text");
+      const resultAction = document.getElementById("mobile-result-action");
+
+      let secondsLeft = 30;
+      let timerId = null;
+      let submitted = false;
+
+      function updateTimer() {
+        if (submitted) return;
+        secondsLeft--;
+        const mins = Math.floor(secondsLeft / 60);
+        const secs = secondsLeft % 60;
+        timerText.textContent = String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+        if (secondsLeft <= 5) {
+          timerBox.classList.add("warning");
+        }
+        if (secondsLeft <= 0) {
+          clearInterval(timerId);
+          doSubmit(true);
+        }
+      }
+
+      timerId = setInterval(updateTimer, 1000);
+
+      optionsBox.addEventListener("change", function() {
+        submitBtn.disabled = false;
+      });
+
+      form.addEventListener("submit", function(e) {
+        e.preventDefault();
+        doSubmit(false);
+      });
+
+      async function doSubmit(timedOut) {
+        if (submitted) return;
+        submitted = true;
+        clearInterval(timerId);
+        submitBtn.disabled = true;
+
+        const body = {
+          session_id: Number(form.session_id.value),
+          question_id: Number(form.question_id.value),
+          team_id: Number(form.team_id.value) || undefined,
+          response_seconds: 30 - secondsLeft,
+          timed_out: timedOut
+        };
+
+        if (!timedOut) {
+          const checked = form.querySelector('input[name="selected_option_id"]:checked');
+          if (checked) {
+            body.selected_option_id = Number(checked.value);
+          }
+        }
+
+        try {
+          const res = await fetch("/api/game/mobile-answer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json();
+          form.hidden = true;
+          resultBox.hidden = false;
+
+          if (data.is_correct) {
+            resultIcon.src = "/images/icons/correct.svg";
+            resultTitle.textContent = "Awesome! Correct Answer!";
+            resultText.textContent = "+" + (data.points_awarded || 10) + " points awarded to your team!";
+            resultAction.textContent = "Power unlocked: " + (data.card_action || "");
+          } else {
+            resultIcon.src = "/images/icons/wrong.svg";
+            resultTitle.textContent = timedOut ? "Time's up!" : "Not quite!";
+            resultText.textContent = data.explanation || "No points awarded.";
+            resultAction.textContent = "Basic move: " + (data.card_action || "Advance 1 space");
+          }
+        } catch (err) {
+          console.error(err);
+          form.hidden = true;
+          resultBox.hidden = false;
+          resultTitle.textContent = "Answer Sent";
+          resultText.textContent = "Your answer was received. Watch the game board!";
+        }
+      }
+    })();
+

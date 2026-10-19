@@ -11,7 +11,7 @@ const { getSummaryData } = require("../services/dashboardService");
 const { homeFor } = require("../middleware/pageAuth");
 
 // Card faces that live in client/public/images/cards
-const CARD_FACES = new Set(["ace", "king", "jack", "joker"]);
+const CARD_FACES = new Set(["ace", "king", "jack", "joker", "10", "4", "5", "7"]);
 
 function cardImage(cardName) {
     const slug = String(cardName).toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -158,6 +158,75 @@ async function showDashboard(req, res) {
     });
 }
 
+// Mobile-friendly question answering page (opened when scanning QR code with phone camera)
+async function showMobileQuestion(req, res) {
+    const qrToken = String(req.params.qrToken || "").trim();
+    const sessionId = Number(req.query.session) || null;
+    const teamId = Number(req.query.team) || null;
+
+    if (!qrToken) {
+        return showNotFound(res);
+    }
+
+    const [rows] = await pool.execute(
+        `SELECT c.card_id, c.card_name, c.card_effect, c.difficulty,
+                q.question_id, q.topic, q.question_text
+         FROM cards c
+         JOIN questions q ON q.card_id = c.card_id
+         WHERE c.qr_token = ? AND c.is_active = 1 AND q.is_active = 1
+         ORDER BY RAND()
+         LIMIT 1`,
+        [qrToken]
+    );
+
+    if (rows.length === 0) {
+        return res.status(404).render("error", {
+            pageTitle: "Card Not Found",
+            heading: "Question Not Found",
+            text: "No active question found for this card QR code."
+        });
+    }
+
+    const item = rows[0];
+
+    const [options] = await pool.execute(
+        `SELECT option_id, option_label, option_text
+         FROM question_options
+         WHERE question_id = ?
+         ORDER BY option_label`,
+        [item.question_id]
+    );
+
+    let sessionInfo = null;
+    if (sessionId) {
+        const [[s]] = await pool.execute(
+            `SELECT session_id, session_code, status FROM game_sessions WHERE session_id = ?`,
+            [sessionId]
+        );
+        sessionInfo = s || null;
+    }
+
+    return res.render("mobile-question", {
+        pageTitle: "Answer Question - " + item.card_name,
+        card: {
+            card_id: item.card_id,
+            card_name: item.card_name,
+            card_effect: item.card_effect,
+            difficulty: item.difficulty,
+            image: cardImage(item.card_name)
+        },
+        question: {
+            question_id: item.question_id,
+            topic: item.topic,
+            question_text: item.question_text,
+            options
+        },
+        sessionId,
+        teamId,
+        session: sessionInfo
+    });
+}
+
 module.exports = {
     showNotFound,
     showHome,
@@ -168,5 +237,6 @@ module.exports = {
     showLecturerHome,
     showSession,
     showGame,
-    showDashboard
+    showDashboard,
+    showMobileQuestion
 };

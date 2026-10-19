@@ -813,3 +813,417 @@ a:focus-visible {
         font-size: 3rem;
     }
 }
+
+
+/* ---------- Jackaroo Board ---------- */
+.board-wrapper {
+    display: flex;
+    justify-content: center;
+    padding: 10px 0;
+}
+
+.board {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    aspect-ratio: 1;
+    background: radial-gradient(circle at 50% 50%, #edd3a8 0%, #d8b479 60%, #b88f4b 100%);
+    border-radius: 28px;
+    border: 6px solid #663d14;
+    box-shadow: inset 0 0 40px rgba(78, 42, 10, 0.4), 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 3px #f5c52b;
+    overflow: hidden;
+}
+
+/* 52 Perimeter Track Holes */
+.space {
+    position: absolute;
+    width: 5.2%;
+    height: 5.2%;
+    border-radius: 50%;
+    background: radial-gradient(circle at 45% 45%, #180c03 0%, #311807 70%, #4a240b 100%);
+    transform: translate(-50%, -50%);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.85), 0 1px 1px rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(0, 0, 0, 0.4);
+    z-index: 1;
+}
+
+/* Track entry holes */
+.space.entry-space {
+    background: radial-gradient(circle at 45% 45%, #2a1405 0%, #452109 70%, #633210 100%);
+    border: 2px solid #ffc83d;
+    box-shadow: 0 0 10px rgba(255, 200, 61, 0.6), inset 0 2px 4px rgba(0, 0, 0, 0.85);
+}
+
+/* 4-Hole Queue Row (matching Image 2) */
+.space.queue-space {
+    background: radial-gradient(circle at 45% 45%, #100602 0%, #261105 70%, #3e1c08 100%);
+    border: 2px solid rgba(255, 200, 61, 0.35);
+    box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.9), 0 1px 1px rgba(255, 255, 255, 0.2);
+    z-index: 2;
+}
+
+.space.queue-space[data-team-colour="red"],
+.space.queue-space[data-team="red"] { border-color: rgba(229, 57, 53, 0.7); box-shadow: 0 0 6px rgba(229, 57, 53, 0.3), inset 0 3px 6px rgba(0, 0, 0, 0.9); }
+.space.queue-space[data-team-colour="blue"],
+.space.queue-space[data-team="blue"] { border-color: rgba(30, 136, 229, 0.7); box-shadow: 0 0 6px rgba(30, 136, 229, 0.3), inset 0 3px 6px rgba(0, 0, 0, 0.9); }
+.space.queue-space[data-team-colour="green"],
+.space.queue-space[data-team="green"] { border-color: rgba(67, 160, 71, 0.7); box-shadow: 0 0 6px rgba(67, 160, 71, 0.3), inset 0 3px 6px rgba(0, 0, 0, 0.9); }
+.space.queue-space[data-team-colour="yellow"],
+.space.queue-space[data-team="yellow"] { border-color: rgba(253, 216, 53, 0.7); box-shadow: 0 0 6px rgba(253, 216, 53, 0.3), inset 0 3px 6px rgba(0, 0, 0, 0.9); }
+.space.queue-space[data-team-colour="purple"],
+.space.queue-space[data-team="purple"] { border-color: rgba(142, 36, 170, 0.7); box-shadow: 0 0 6px rgba(142, 36, 170, 0.3), inset 0 3px 6px rgba(0, 0, 0, 0.9); }
+.space.queue-space[data-team-colour="orange"],
+.space.queue-space[data-team="orange"] { border-color: rgba(251, 140, 0, 0.7); box-shadow: 0 0 6px rgba(251, 140, 0, 0.3), inset 0 3px 6px rgba(0, 0, 0, 0.9); }
+
+/* Rotated Diamond Home Base (matching Image 1) */
+.home-base {
+    position: absolute;
+    width: 17%;
+    height: 17%;
+    transform: translate(-50%, -50%) rotate(45deg);
+    border-radius: 14px;
+    background: linear-gradient(135deg, #d3ab6d 0%, #b88a44 100%);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35), 0 4px 10px rgba(0, 0, 0, 0.3);
+    border: 2.5px solid #7c5222;
+    z-index: 1;
+}
+
+/* Sunken 4-Ball Sockets inside Home Base (matching Image 1) */
+.home-slot {
+    position: absolute;
+    width: 5.4%;
+    height: 5.4%;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle at 45% 45%, #150a02 0%, #2a1506 65%, #3d200a 100%);
+    box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.9), 0 1px 1px rgba(255, 255, 255, 0.25);
+    border: 1.5px solid rgba(0, 0, 0, 0.4);
+    z-index: 2;
+}
+
+/* 3D Glossy Marbles / Balls */
+.marble {
+    position: absolute;
+    width: 5.6%;
+    height: 5.6%;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: left 0.65s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 10;
+    border: 1.5px solid rgba(0, 0, 0, 0.35);
+    box-shadow: inset -3px -3px 6px rgba(0, 0, 0, 0.4), inset 3px 3px 6px rgba(255, 255, 255, 0.55), 0 3px 6px rgba(0, 0, 0, 0.45);
+    cursor: default;
+}
+
+/* Marble colors with radial light highlights (matching Image 1) */
+.marble[data-colour="red"] { background: radial-gradient(circle at 35% 35%, #ff7961, #e53935 60%, #b71c1c 100%); }
+.marble[data-colour="blue"] { background: radial-gradient(circle at 35% 35%, #64b5f6, #1e88e5 60%, #0d47a1 100%); }
+.marble[data-colour="green"] { background: radial-gradient(circle at 35% 35%, #81c784, #43a047 60%, #1b5e20 100%); }
+.marble[data-colour="yellow"] { background: radial-gradient(circle at 35% 35%, #fff59d, #fdd835 60%, #f57f17 100%); }
+.marble[data-colour="purple"] { background: radial-gradient(circle at 35% 35%, #ce93d8, #8e24aa 60%, #4a148c 100%); }
+.marble[data-colour="orange"] { background: radial-gradient(circle at 35% 35%, #ffb74d, #fb8c00 60%, #e65100 100%); }
+
+.marble.selectable {
+    cursor: pointer;
+    animation: marble-glow 1s ease-in-out infinite;
+    z-index: 25;
+}
+
+@keyframes marble-glow {
+    0%, 100% { box-shadow: 0 0 10px 4px rgba(255, 200, 61, 0.7), inset -3px -3px 6px rgba(0,0,0,0.4), inset 3px 3px 6px rgba(255,255,255,0.6); }
+    50% { box-shadow: 0 0 20px 8px rgba(255, 200, 61, 1), inset -3px -3px 6px rgba(0,0,0,0.4), inset 3px 3px 6px rgba(255,255,255,0.7); }
+}
+
+/* ---------- Board Center Medallion & Card (matching reference image) ---------- */
+.board-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 22%;
+    height: 22%;
+    background: radial-gradient(circle, #e2be84 0%, #c49a56 70%, #996e2a 100%);
+    border-radius: 50%;
+    border: 3px solid #7c5222;
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.35), 0 0 12px rgba(120, 80, 30, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+}
+
+.center-card-slot {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.center-card-img {
+    max-width: 65px;
+    max-height: 92px;
+    border-radius: 6px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+    transform: rotate(-6deg);
+    border: 1.5px solid rgba(255, 255, 255, 0.8);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.center-card-img:hover {
+    transform: rotate(0deg) scale(1.08);
+}
+
+.center-brand {
+    color: #4e2b0b;
+    font-weight: 900;
+    font-size: 0.85rem;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.7;
+    line-height: 1.2;
+}
+
+/* ---------- Card Selection Row ---------- */
+.card-pick-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    border: 3px solid var(--gold);
+    border-radius: 12px;
+    background: var(--cream);
+    cursor: pointer;
+    min-width: 90px;
+    flex-shrink: 0;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.card-pick-btn:hover:not(:disabled) {
+    transform: translateY(-4px);
+    border-color: var(--teal);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+}
+
+.card-pick-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.card-pick-btn img {
+    border-radius: 6px;
+}
+
+.card-pick-name {
+    font-weight: 900;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    color: var(--ink);
+}
+
+.card-pick-effect {
+    font-size: 0.7rem;
+    color: #5a3a20;
+    text-align: center;
+    max-width: 100px;
+    line-height: 1.2;
+}
+
+/* ---------- QR Code Phone Scan Modal Panel ---------- */
+.qr-panel-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0;
+}
+
+.qr-card-info {
+    text-align: center;
+    flex: 1;
+    min-width: 180px;
+    max-width: 240px;
+}
+
+.qr-card-img {
+    border-radius: 8px;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
+    margin: 8px 0;
+}
+
+.qr-card-name {
+    margin: 4px 0;
+    color: var(--pink);
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.qr-scan-box {
+    text-align: center;
+    flex: 1.5;
+    min-width: 260px;
+    background: var(--bg-soft);
+    border: 3px solid var(--gold);
+    border-radius: 16px;
+    padding: 18px 20px;
+    color: var(--white);
+}
+
+.qr-scan-box .subtitle {
+    color: var(--gold);
+    font-weight: 900;
+    margin-bottom: 12px;
+}
+
+.qr-image-wrapper {
+    display: inline-block;
+    padding: 10px;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    margin-bottom: 12px;
+}
+
+.qr-code-img {
+    display: block;
+    width: 200px;
+    height: 200px;
+    border-radius: 8px;
+}
+
+.qr-status {
+    font-size: 0.95rem;
+    color: var(--cream);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 8px 0 16px;
+}
+
+.qr-pulse-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: qr-pulse 1.4s infinite;
+}
+
+@keyframes qr-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* ---------- Game Panels ---------- */
+.game-panel {
+    background: var(--cream);
+    color: var(--ink);
+    border: 3px solid var(--gold);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    margin-top: 10px;
+}
+
+.panel-title {
+    margin: 0 0 10px;
+    color: var(--pink);
+    font-size: 1.35rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+/* ---------- Move Choices ---------- */
+.move-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.move-choice-btn {
+    padding: 12px 20px;
+    border: 2px solid var(--gold);
+    border-radius: 12px;
+    background: var(--teal);
+    color: var(--white);
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    transition: filter 0.15s, transform 0.15s;
+}
+
+.move-choice-btn:hover {
+    filter: brightness(1.12);
+    transform: translateY(-2px);
+}
+
+/* ---------- Mobile Question Answering Page ---------- */
+.mobile-question-container {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 10px;
+}
+
+.mobile-header-badge {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.mobile-question-card {
+    background: var(--cream);
+    color: var(--ink);
+    border: 3px solid var(--gold);
+    border-radius: var(--radius);
+    padding: 18px;
+}
+
+.mobile-card-preview {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 14px;
+    margin-bottom: 14px;
+    border-bottom: 2px dashed rgba(43, 26, 20, 0.2);
+}
+
+.card-img-small {
+    border-radius: 6px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+    flex-shrink: 0;
+}
+
+.mobile-card-title {
+    margin: 0;
+    color: var(--pink);
+    font-size: 1.25rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.mobile-card-effect {
+    margin: 2px 0 6px;
+    font-size: 0.85rem;
+    color: #4a2d18;
+}
+
+.mobile-result-box {
+    text-align: center;
+    padding: 18px 10px;
+}
+
+/* Responsive board */
+@media (max-width: 540px) {
+    .board { max-width: 100%; border-width: 4px; border-radius: 20px; }
+    .marble { width: 6.2%; height: 6.2%; }
+    .space { width: 5.6%; height: 5.6%; }
+    .home-slot { width: 5.6%; height: 5.6%; }
+    .qr-code-img { width: 170px; height: 170px; }
+}

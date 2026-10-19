@@ -1,7 +1,7 @@
 const pool = require("../config/database");
 
 // Card faces that exist in client/public/images/cards
-const CARD_FACES = new Set(["ace", "king", "jack", "joker"]);
+const CARD_FACES = new Set(["ace", "king", "jack", "joker", "10", "4", "5", "7"]);
 
 function cardImage(cardName) {
     const slug = String(cardName).toLowerCase().replace(/[^a-z0-9]+/g, "-");

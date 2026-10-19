@@ -38,6 +38,8 @@ async function createRound(connection, sessionId, roundNumber) {
     return order;
 }
 
+const { initializePieces } = require("./pieceService");
+
 // Called when the lecturer starts the session: makes round 1 and the game state.
 // Returns the first player, or null if nobody has joined.
 async function startGame(connection, sessionId) {
@@ -46,6 +48,13 @@ async function startGame(connection, sessionId) {
     if (order.length === 0) {
         return null;
     }
+
+    // Initialize pieces for all teams in the session
+    const [teams] = await connection.execute(
+        `SELECT team_id FROM teams WHERE session_id = ? ORDER BY team_id`,
+        [sessionId]
+    );
+    await initializePieces(connection, sessionId, teams);
 
     await connection.execute(
         `INSERT INTO game_state (session_id, current_team_id, turn_number, last_action)

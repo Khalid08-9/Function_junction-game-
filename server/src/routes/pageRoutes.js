@@ -16,6 +16,9 @@ router.get("/login", redirectIfLoggedIn, pages.showLogin);
 router.get("/register", redirectIfLoggedIn, pages.showRegister);
 router.get("/register-lecturer", redirectIfLoggedIn, pages.showRegisterLecturer);
 
+// Mobile QR scan question page (open to phone camera scan)
+router.get("/q/:qrToken", asyncHandler(pages.showMobileQuestion));
+
 // Student
 router.get("/play", requirePageLogin, requirePageRole("student"),
     asyncHandler(pages.showStudentHome));
