@@ -1,14 +1,27 @@
 const pool = require("../config/database");
 
 const TRACK_SIZE = 52;
-const TEAM_ENTRY = [0, 13, 26, 39]; // Entry spaces for 4 teams
-const PIECES_PER_TEAM = 4;
+// 4 Seats: Seat 0 = Red (Bottom-Right), Seat 1 = Blue (Top-Right), Seat 2 = Green (Top-Left), Seat 3 = Yellow (Bottom-Left)
+const SEAT_ENTRY = { 0: 0, 1: 39, 2: 26, 3: 13 };
+const SEAT_COLOURS = ["red", "blue", "green", "yellow"];
+const PIECES_PER_SEAT = 4;
 const QUEUE_SIZE = 4;
 
-// Initialize 4 pieces per team for a newly started session
+// Determine seat (0..3) for a given piece and team index
+// Team 1 (index 0) gets Seat 0 (Red) and Seat 2 (Green)
+// Team 2 (index 1) gets Seat 1 (Blue) and Seat 3 (Yellow)
+function getSeatForPiece(piece, teamIndex) {
+    if (teamIndex === 0) {
+        return piece.piece_number <= 4 ? 0 : 2;
+    } else {
+        return piece.piece_number <= 4 ? 1 : 3;
+    }
+}
+
+// Initialize 8 pieces per team (4 per corner base, total 16 pieces across 4 corners)
 async function initializePieces(connection, sessionId, teams) {
     for (const team of teams) {
-        for (let i = 1; i <= PIECES_PER_TEAM; i++) {
+        for (let i = 1; i <= 8; i++) {
             await connection.execute(
                 `INSERT IGNORE INTO game_pieces
                     (session_id, team_id, piece_number, position_type, position_index)
@@ -19,7 +32,17 @@ async function initializePieces(connection, sessionId, teams) {
     }
 }
 
-// Get all pieces for a session with team info (auto-initializes 4 pieces in home per team if needed)
+// Determine board index (0..1) for a team in the session
+async function getTeamBoardIndex(db, sessionId, teamId) {
+    const [teams] = await db.execute(
+        `SELECT team_id FROM teams WHERE session_id = ? ORDER BY team_id`,
+        [sessionId]
+    );
+    const index = teams.findIndex((t) => t.team_id === teamId);
+    return index >= 0 ? index : 0;
+}
+
+// Get all pieces for a session with seat info (auto-initializes 16 pieces in 4 corner bases)
 async function getPieces(sessionId) {
     let [pieces] = await pool.execute(
         `SELECT gp.piece_id, gp.session_id, gp.team_id, gp.piece_number,
@@ -32,11 +55,12 @@ async function getPieces(sessionId) {
         [sessionId]
     );
 
-    if (pieces.length === 0) {
-        const [teams] = await pool.execute(
-            `SELECT team_id FROM teams WHERE session_id = ? ORDER BY team_id`,
-            [sessionId]
-        );
+    const [teams] = await pool.execute(
+        `SELECT team_id FROM teams WHERE session_id = ? ORDER BY team_id`,
+        [sessionId]
+    );
+
+    if (pieces.length === 0 || pieces.length < 16) {
         if (teams.length > 0) {
             await initializePieces(pool, sessionId, teams);
             [pieces] = await pool.execute(
@@ -52,21 +76,28 @@ async function getPieces(sessionId) {
         }
     }
 
-    return pieces;
+    // Decorate each piece with its dedicated corner seat and seat colour
+    return pieces.map(piece => {
+        const teamIndex = teams.findIndex(t => t.team_id === piece.team_id);
+        const seatIndex = getSeatForPiece(piece, teamIndex >= 0 ? teamIndex : 0);
+        return {
+            ...piece,
+            seat_index: seatIndex,
+            seat_colour: SEAT_COLOURS[seatIndex]
+        };
+    });
 }
 
-// Determine board index (0..3) for a team in the session
-async function getTeamBoardIndex(db, sessionId, teamId) {
-    const [teams] = await db.execute(
-        `SELECT team_id FROM teams WHERE session_id = ? ORDER BY team_id`,
-        [sessionId]
-    );
-    const index = teams.findIndex((t) => t.team_id === teamId);
-    return index >= 0 ? index : 0;
-}
+// Enter a piece from home onto the track at the seat's entry space
+// Validates that only Ace, King, or Joker can exit from home
+async function enterPiece(connection, sessionId, teamId, pieceId, cardName = "") {
+    if (cardName) {
+        const norm = String(cardName).trim().toLowerCase();
+        if (!["ace", "king", "joker"].includes(norm)) {
+            throw new Error("Only Ace, King, or Joker can exit a marble from the home base!");
+        }
+    }
 
-// Enter a piece from home onto the track at the team's entry space
-async function enterPiece(connection, sessionId, teamId, pieceId) {
     const [[piece]] = await connection.execute(
         `SELECT * FROM game_pieces WHERE piece_id = ? AND session_id = ? AND team_id = ? FOR UPDATE`,
         [pieceId, sessionId, teamId]
@@ -79,8 +110,9 @@ async function enterPiece(connection, sessionId, teamId, pieceId) {
         throw new Error("Piece is already out of home.");
     }
 
-    const boardIndex = await getTeamBoardIndex(connection, sessionId, teamId);
-    const entrySpace = TEAM_ENTRY[boardIndex];
+    const teamIndex = await getTeamBoardIndex(connection, sessionId, teamId);
+    const seatIndex = getSeatForPiece(piece, teamIndex);
+    const entrySpace = SEAT_ENTRY[seatIndex];
 
     // Check if an opponent piece is sitting at the entry space
     const [occupants] = await connection.execute(
@@ -96,9 +128,9 @@ async function enterPiece(connection, sessionId, teamId, pieceId) {
     for (const occ of occupants) {
         if (occ.team_id !== teamId) {
             // Check if occupant is on their own safe base entry
-            const occBoardIndex = await getTeamBoardIndex(connection, sessionId, occ.team_id);
-            if (TEAM_ENTRY[occBoardIndex] !== entrySpace) {
-                // Send back to home
+            const occTeamIndex = await getTeamBoardIndex(connection, sessionId, occ.team_id);
+            const occSeat = getSeatForPiece(occ, occTeamIndex);
+            if (SEAT_ENTRY[occSeat] !== entrySpace) {
                 await connection.execute(
                     `UPDATE game_pieces SET position_type = 'home', position_index = 0 WHERE piece_id = ?`,
                     [occ.piece_id]
@@ -113,11 +145,11 @@ async function enterPiece(connection, sessionId, teamId, pieceId) {
         [entrySpace, pieceId]
     );
 
-    return { success: true, captured, entrySpace };
+    return { success: true, captured, entrySpace, seatIndex };
 }
 
-// Move a piece by a number of spaces (forward or backward)
-async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing = false) {
+// Move a piece by a number of spaces (forward or backward) with Base Entry Blockade support
+async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing = false, isJoker = false) {
     const [[piece]] = await connection.execute(
         `SELECT * FROM game_pieces WHERE piece_id = ? AND session_id = ? AND team_id = ? FOR UPDATE`,
         [pieceId, sessionId, teamId]
@@ -130,8 +162,9 @@ async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing 
         throw new Error("Piece must be on the track or queue to move.");
     }
 
-    const boardIndex = await getTeamBoardIndex(connection, sessionId, teamId);
-    const entrySpace = TEAM_ENTRY[boardIndex];
+    const teamIndex = await getTeamBoardIndex(connection, sessionId, teamId);
+    const seatIndex = getSeatForPiece(piece, teamIndex);
+    const entrySpace = SEAT_ENTRY[seatIndex];
     const preEntrySpace = (entrySpace - 1 + TRACK_SIZE) % TRACK_SIZE;
 
     let newType = piece.position_type;
@@ -150,7 +183,38 @@ async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing 
         newIndex = (piece.position_index + spaces + TRACK_SIZE) % TRACK_SIZE;
     } else {
         // Forward move
-        // Distance to pre-entry space
+        // Check for Base Entry Blockades:
+        // "when the ball stope in the places that I put arror the player whostoping canot move until put joker or wating for blue to move"
+        if (!isJoker) {
+            const [allPieces] = await connection.execute(
+                `SELECT gp.*, t.team_id AS p_team_id
+                 FROM game_pieces gp
+                 JOIN teams t ON t.team_id = gp.team_id
+                 WHERE gp.session_id = ? AND gp.position_type = 'track'`,
+                [sessionId]
+            );
+
+            // Collect any base entry space occupied by its owning seat's marble
+            const blockedEntries = new Set();
+            for (const p of allPieces) {
+                const pTeamIdx = await getTeamBoardIndex(connection, sessionId, p.team_id);
+                const pSeat = getSeatForPiece(p, pTeamIdx);
+                const baseEntry = SEAT_ENTRY[pSeat];
+                if (p.position_index === baseEntry && p.piece_id !== pieceId) {
+                    blockedEntries.add(baseEntry);
+                }
+            }
+
+            // Check if any step in this move passes through or lands on a blocked base entry
+            for (let step = 1; step <= spaces; step++) {
+                const checkPos = (piece.position_index + step) % TRACK_SIZE;
+                if (blockedEntries.has(checkPos)) {
+                    throw new Error("Movement blocked: A marble is protecting its base entry spot. You cannot pass until a Joker is played or that marble moves.");
+                }
+            }
+        }
+
+        // Distance to pre-entry space (turning into the inward queue)
         const distToPreEntry = (preEntrySpace - piece.position_index + TRACK_SIZE) % TRACK_SIZE;
 
         if (spaces > distToPreEntry && distToPreEntry >= 0) {
@@ -183,7 +247,7 @@ async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing 
     // Capture logic if landing on track
     if (newType === "track") {
         if (isKing) {
-            // King captures all pieces passed or landed on
+            // King captures all pieces passed or landed on (except safe base entries)
             const [allOccupants] = await connection.execute(
                 `SELECT gp.* FROM game_pieces gp
                  WHERE gp.session_id = ? AND gp.position_type = 'track' AND gp.team_id != ?
@@ -193,8 +257,8 @@ async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing 
 
             for (const occ of allOccupants) {
                 const occBoardIndex = await getTeamBoardIndex(connection, sessionId, occ.team_id);
-                // Cannot capture on opponent's safe entry space
-                if (occ.position_index === TEAM_ENTRY[occBoardIndex]) continue;
+                const occSeat = getSeatForPiece(occ, occBoardIndex);
+                if (occ.position_index === SEAT_ENTRY[occSeat]) continue; // safe on base
 
                 const dist = (occ.position_index - piece.position_index + TRACK_SIZE) % TRACK_SIZE;
                 if (dist > 0 && dist <= spaces) {
@@ -216,7 +280,8 @@ async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing 
 
             for (const occ of occupants) {
                 const occBoardIndex = await getTeamBoardIndex(connection, sessionId, occ.team_id);
-                if (occ.position_index !== TEAM_ENTRY[occBoardIndex]) {
+                const occSeat = getSeatForPiece(occ, occBoardIndex);
+                if (occ.position_index !== SEAT_ENTRY[occSeat]) {
                     await connection.execute(
                         `UPDATE game_pieces SET position_type = 'home', position_index = 0 WHERE piece_id = ?`,
                         [occ.piece_id]
@@ -256,14 +321,16 @@ async function swapPieces(connection, sessionId, teamId, pieceId, targetPieceId)
         throw new Error("Cannot swap with your own piece.");
     }
 
-    // Safety checks: neither can be on their respective entry spaces
+    // Safety checks: neither piece can be on its respective entry space
     const myBoardIndex = await getTeamBoardIndex(connection, sessionId, teamId);
+    const mySeat = getSeatForPiece(myPiece, myBoardIndex);
     const targetBoardIndex = await getTeamBoardIndex(connection, sessionId, targetPiece.team_id);
+    const targetSeat = getSeatForPiece(targetPiece, targetBoardIndex);
 
-    if (myPiece.position_index === TEAM_ENTRY[myBoardIndex]) {
+    if (myPiece.position_index === SEAT_ENTRY[mySeat]) {
         throw new Error("Cannot swap a piece that is on its entry base.");
     }
-    if (targetPiece.position_index === TEAM_ENTRY[targetBoardIndex]) {
+    if (targetPiece.position_index === SEAT_ENTRY[targetSeat]) {
         throw new Error("Cannot swap an opponent piece on its entry base.");
     }
 
@@ -281,7 +348,7 @@ async function swapPieces(connection, sessionId, teamId, pieceId, targetPieceId)
     return { success: true };
 }
 
-// Win check: all 4 pieces are in the queue
+// Win check: at least 4 pieces in the queue for the team
 async function checkWin(db, sessionId, teamId) {
     const [[result]] = await db.execute(
         `SELECT COUNT(*) AS queue_count
@@ -289,14 +356,16 @@ async function checkWin(db, sessionId, teamId) {
          WHERE session_id = ? AND team_id = ? AND position_type = 'queue'`,
         [sessionId, teamId]
     );
-    return Number(result.queue_count) >= PIECES_PER_TEAM;
+    return Number(result.queue_count) >= PIECES_PER_SEAT;
 }
 
 module.exports = {
     TRACK_SIZE,
-    TEAM_ENTRY,
-    PIECES_PER_TEAM,
+    SEAT_ENTRY,
+    SEAT_COLOURS,
+    PIECES_PER_SEAT,
     QUEUE_SIZE,
+    getSeatForPiece,
     initializePieces,
     getPieces,
     getTeamBoardIndex,
@@ -305,4 +374,3 @@ module.exports = {
     swapPieces,
     checkWin
 };
-

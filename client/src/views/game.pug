@@ -7,105 +7,135 @@ block content
     data-my-user-id=currentUser.user_id,
     data-question-seconds=questionSeconds
   )
-    .scorebar
-      each team in teams
-        .score-team(data-team-id=team.team_id, data-colour=team.team_colour.toLowerCase(), class=(myTeam && team.team_id === myTeam.team_id ? 'mine' : null))
-          span.score-name= team.team_name
-          span.score-value(data-score)= team.current_score
-    p#round-info.round-info(aria-live='polite')
-    #turn-banner.turn-banner(role='status', aria-live='polite') Loading the game...
+    //- Top Storyboard Banner (matching Image 2)
+    .turn-score-banner
+      .banner-team-pill.team-left(data-team-id=(teams[0] ? teams[0].team_id : ''))
+        span.team-pill-name= (teams[0] ? teams[0].team_name : 'Team 1')
+        span.team-pill-sep &bull;
+        span.team-pill-score(data-score)= (teams[0] ? teams[0].current_score : 0)
+      
+      .banner-turn-center
+        h1#turn-banner.main-turn-title Loading turn...
+        p#round-info.round-sub-info Round 1
+      
+      .banner-team-pill.team-right(data-team-id=(teams[1] ? teams[1].team_id : ''))
+        span.team-pill-name= (teams[1] ? teams[1].team_name : 'Team 2')
+        span.team-pill-sep &bull;
+        span.team-pill-score(data-score)= (teams[1] ? teams[1].current_score : 0)
+
     p#game-message.message(role='alert', hidden)
 
-    //- Jackaroo Live Board
-    .board-wrapper
-      #jackaroo-board.board
-        //- Center card placement (like the real physical Jackaroo board)
-        #board-center.board-center
-          #center-card-slot.center-card-slot
-            img#center-card-img.center-card-img(src="/images/cards/card-back.svg", alt="Board Center", hidden)
-            span#center-brand.center-brand Function<br>Junction
+    //- Main Two-Column Game Layout (matching Image 2)
+    .game-two-col
+      //- Left Column: Jackaroo Board inside themed frame
+      .game-board-container
+        .board-header-bar
+          h2.board-title JACKAROO
+        
+        .board-wrapper
+          #jackaroo-board.board
+            //- Center card placement (like the real physical Jackaroo board)
+            #board-center.board-center
+              #center-card-slot.center-card-slot
+                img#center-card-img.center-card-img(src="/images/cards/card-back.svg", alt="Board Center", hidden)
+                span#center-brand.center-brand Function<br>Junction
 
-    //- 1. Card selection bar
-    section#panel-cards.game-panel
-      h2.panel-title Pick a card to play
-      .cards-row#card-buttons
-        each card in cards
-          button.card-pick-btn(type='button', data-card-id=card.card_id, data-card-name=card.card_name, disabled)
-            img(src=card.image, alt=card.card_name, width='80', height='112')
-            span.card-pick-name= card.card_name
-            span.card-pick-effect= card.card_effect
-      .button-row
-        button#end-turn-button.btn.btn-small.btn-pink(type='button', hidden) End my turn
-      p#turn-hint.hint(aria-live='polite')
+      //- Right Column: Storyboard Control Sidebar
+      aside.game-sidebar
+        .sidebar-card
+          .sidebar-header
+            span.sidebar-tag CURRENT TURN
+            h2#sidebar-player-name.sidebar-turn-player Loading...
 
-    //- 2. QR Code Display: Scan to phone to answer!
-    section#panel-card-qr.game-panel(hidden)
-      .qr-panel-inner
-        .qr-card-info
-          h2.panel-title Card Played
-          img#qr-card-img.qr-card-img(src="/images/cards/card-back.svg", alt="Card", width="100", height="140")
-          h3#qr-card-name.qr-card-name Card Name
-          p#qr-card-effect.hint Card Effect
-        .qr-scan-box
-          h3.subtitle 📱 Scan with your phone to answer!
-          .qr-image-wrapper
-            img#qr-code-img.qr-code-img(src="", alt="QR Code to scan with phone")
-          p#qr-status-text.qr-status
-            span.qr-pulse-dot
-            |  Waiting for answer from phone camera...
-          .button-row
-            button#btn-answer-desktop.btn(type="button") 💻 Or answer on this screen
-            button#btn-cancel-qr.btn.btn-small.btn-pink(type="button") Cancel / Pick another card
+          //- 1. Card selection bar
+          section#panel-cards.game-panel
+            .badge-row
+              span.badge-strong-cards STRONG CARDS
+            
+            .cards-row#card-buttons
+              each card in cards
+                button.card-pick-btn(type='button', data-card-id=card.card_id, data-card-name=card.card_name, disabled)
+                  img(src=card.image, alt=card.card_name, width='72', height='100')
+                  span.card-pick-name= card.card_name
+                  span.card-pick-effect= card.card_effect
+                  span.card-scan-label SCAN TO UNLOCK
+            
+            .action-buttons-row
+              button#btn-scan-card.btn.btn-action-teal(type='button') SCAN CARD
+              button#end-turn-button.btn.btn-action-teal(type='button', hidden) END TURN
+            
+            p#turn-hint.hint(aria-live='polite')
 
-    //- 3. Move choice (for Ace / King / 10 branching actions)
-    section#panel-move-choice.game-panel(hidden)
-      h2.panel-title Choose your move
-      p#move-action-text.subtitle
-      .move-choices#move-choices
-      button#cancel-move-choice.btn.btn-small.btn-pink(type='button') Cancel
+          //- 2. QR Code Display: Scan to phone to answer!
+          section#panel-card-qr.game-panel(hidden)
+            .qr-panel-inner
+              .qr-card-info
+                h3.panel-title Card Played
+                img#qr-card-img.qr-card-img(src="/images/cards/card-back.svg", alt="Card", width="90", height="126")
+                h4#qr-card-name.qr-card-name Card Name
+                p#qr-card-effect.hint Card Effect
+              .qr-scan-box
+                h3.subtitle 📱 Scan with your phone!
+                .qr-image-wrapper
+                  img#qr-code-img.qr-code-img(src="", alt="QR Code to scan with phone")
+                p#qr-status-text.qr-status
+                  span.qr-pulse-dot
+                  |  Waiting for answer from phone camera...
+                .button-row
+                  button#btn-answer-desktop.btn.btn-small(type="button") 💻 Answer on this screen
+                  button#btn-cancel-qr.btn.btn-small.btn-pink(type="button") Cancel
 
-    //- 4. Marble selection prompt (highlighted on board)
-    section#panel-select-marble.game-panel(hidden)
-      h2#select-marble-title.panel-title Select a marble
-      p#select-marble-hint.hint Click one of your highlighted glowing marbles on the board
-      button#cancel-select.btn.btn-small.btn-pink(type='button') Cancel
+          //- 3. Move choice (for Ace / King / 10 branching actions)
+          section#panel-move-choice.game-panel(hidden)
+            h3.panel-title Choose your move
+            p#move-action-text.subtitle
+            .move-choices#move-choices
+            button#cancel-move-choice.btn.btn-small.btn-pink(type='button') Cancel
 
-    //- 5. Question on screen (if answered directly on screen)
-    section#panel-question.game-panel(hidden)
-      p#card-detected.label
-      .question-head
-        h2#question-title.question-title
-        #timer.timer
-          img(src='/images/icons/timer.svg', alt='', width='22', height='22')
-          span#timer-text 00:00
-      pre#question-code.code-block(hidden)
-      form#answer-form(novalidate)
-        #options.options
-        button#submit-answer.btn(type='submit', disabled) Submit answer
+          //- 4. Marble selection prompt (highlighted on board)
+          section#panel-select-marble.game-panel(hidden)
+            h3#select-marble-title.panel-title Select a marble
+            p#select-marble-hint.hint Click one of your highlighted glowing marbles on the board
+            button#cancel-select.btn.btn-small.btn-pink(type='button') Cancel
 
-    //- 6. Result
-    section#panel-result.game-panel.result(hidden)
-      img#result-icon.result-icon(src='/images/icons/correct.svg', alt='', width='72', height='72')
-      h2#result-title.title
-      p#result-action.result-action
-      p#result-points.result-points
-      p#result-score.hint
-      p#result-answer.result-answer(hidden)
-      p#result-explanation.hint(hidden)
-      .button-row
-        button#move-marble-btn.btn(type='button') Move your marble
-        button#skip-move-btn.btn.btn-small.btn-pink(type='button') Skip move
+          //- 5. Question on screen (if answered directly on screen)
+          section#panel-question.game-panel(hidden)
+            p#card-detected.label
+            .question-head
+              h3#question-title.question-title
+              #timer.timer
+                img(src='/images/icons/timer.svg', alt='', width='20', height='20')
+                span#timer-text 00:00
+            pre#question-code.code-block(hidden)
+            form#answer-form(novalidate)
+              #options.options
+              button#submit-answer.btn(type='submit', disabled) Submit answer
 
-    //- 7. Game over
-    section#panel-finished.game-panel(hidden)
-      h2.title Game finished!
-      p#final-line.subtitle
-      a.btn(href='/play') Back to home
+          //- 6. Result
+          section#panel-result.game-panel.result(hidden)
+            img#result-icon.result-icon(src='/images/icons/correct.svg', alt='', width='64', height='64')
+            h3#result-title.title
+            p#result-action.result-action
+            p#result-points.result-points
+            p#result-score.hint
+            p#result-answer.result-answer(hidden)
+            p#result-explanation.hint(hidden)
+            .button-row
+              button#move-marble-btn.btn(type='button') Move your marble
+              button#skip-move-btn.btn.btn-small.btn-pink(type='button') Skip move
 
-    //- Turn order
-    section.game-panel
-      h3.panel-title Turn order this round
-      ol#order-list.order-list
+          //- 7. Game over
+          section#panel-finished.game-panel(hidden)
+            h3.title Game finished!
+            p#final-line.subtitle
+            a.btn(href='/play') Back to home
+
+          //- Recent Activity (matching Image 2)
+          .recent-activity-panel
+            h3.activity-title RECENT ACTIVITY
+            ul#activity-list.activity-list
+              li.activity-item Game started.
+              li.activity-item All marbles are in their base.
 
 block scripts
   script(src='/js/game.js')

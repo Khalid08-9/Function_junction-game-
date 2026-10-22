@@ -75,7 +75,8 @@ async function movePiece(req, res) {
         let captured = [];
 
         if (action === "enter") {
-            moveResult = await pieceService.enterPiece(connection, sessionId, teamId, pieceId);
+            const cardName = req.body.card_name || "";
+            moveResult = await pieceService.enterPiece(connection, sessionId, teamId, pieceId, cardName);
             captured = moveResult.captured || [];
         } else if (action === "swap") {
             if (!targetPieceId) {
@@ -85,7 +86,8 @@ async function movePiece(req, res) {
             moveResult = await pieceService.swapPieces(connection, sessionId, teamId, pieceId, targetPieceId);
         } else if (action === "move") {
             const isKing = Number(spaces) === 13;
-            moveResult = await pieceService.movePiece(connection, sessionId, teamId, pieceId, Number(spaces), isKing);
+            const isJoker = Boolean(req.body.is_joker);
+            moveResult = await pieceService.movePiece(connection, sessionId, teamId, pieceId, Number(spaces), isKing, isJoker);
             captured = moveResult.captured || [];
         }
 

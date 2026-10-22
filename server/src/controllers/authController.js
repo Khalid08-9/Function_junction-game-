@@ -5,8 +5,8 @@ const pool = require("../config/database");
 // Stops brute-force guessing by locking an (IP, email) pair after too many
 // failed attempts. Kept in memory; it resets when the server restarts.
 const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 3 * 60 * 1000; // 15 minutes
-const WINDOW_MS = 3* 60 * 1000;  // attempts expire after 15 minutes
+const LOCKOUT_MS = 3 * 60 * 1000; 
+const WINDOW_MS = 3* 60 * 1000; 
 
 const loginAttempts = new Map();
 

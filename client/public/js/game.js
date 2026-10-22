@@ -17,54 +17,109 @@
     const POLL_MS = 3000;
 
     // ---------- BOARD GEOMETRY (15x15 grid, indices 0..14) ----------
-    // 52 Track positions (clockwise around perimeter)
+    // 52 Track positions (CLOCKWISE perimeter loop, matching Image 3)
     const TRACK_COORDS = [
-        [8, 14], [8, 13], [8, 12], [8, 11], [8, 10], [8, 9],
-        [9, 8],  [10, 8], [11, 8], [12, 8], [13, 8], [14, 8],
-        [14, 7], [14, 6], [13, 6], [12, 6], [11, 6], [10, 6],
-        [9, 6],  [8, 5],  [8, 4],  [8, 3],  [8, 2],  [8, 1],
-        [8, 0],  [7, 0],  [6, 0],  [6, 1],  [6, 2],  [6, 3],
-        [6, 4],  [6, 5],  [5, 6],  [4, 6],  [3, 6],  [2, 6],
-        [1, 6],  [0, 6],  [0, 7],  [0, 8],  [1, 8],  [2, 8],
-        [3, 8],  [4, 8],  [5, 8],  [6, 9],  [6, 10], [6, 11],
-        [6, 12], [6, 13], [6, 14], [7, 14]
+        // Bottom End Cap (Seat 0 Red Base Entry at 0, moving LEFT <-- to [6, 14])
+        [8, 14], // 0: Red Base Entry (yellow ring)
+        [7, 14], // 1: Bottom center cap (arrow <-- pointing left)
+        [6, 14], // 2: Bottom outer left
+        // Up bottom arm left column
+        [6, 13], // 3
+        [6, 12], // 4
+        [6, 11], // 5
+        [6, 10], // 6
+        [6, 9],  // 7: Bottom inner left corner
+        // Left arm bottom row moving left
+        [5, 8],  // 8: Left inner bottom corner
+        [4, 8],  // 9
+        [3, 8],  // 10
+        [2, 8],  // 11
+        [1, 8],  // 12: Pre-entry for Yellow queue
+        // Left End Cap (Seat 3 Yellow Base Entry at 13, moving UP ^ to [0, 6])
+        [0, 8],  // 13: Yellow Base Entry (yellow ring)
+        [0, 7],  // 14: Left center cap (arrow ^ pointing up)
+        [0, 6],  // 15: Left outer top
+        // Right along left arm top row
+        [1, 6],  // 16
+        [2, 6],  // 17
+        [3, 6],  // 18
+        [4, 6],  // 19
+        [5, 6],  // 20: Left inner top corner
+        // Up top arm left column
+        [6, 5],  // 21: Top inner left corner
+        [6, 4],  // 22
+        [6, 3],  // 23
+        [6, 2],  // 24
+        [6, 1],  // 25: Pre-entry for Green queue
+        // Top End Cap (Seat 2 Green Base Entry at 26, moving RIGHT --> to [8, 0])
+        [6, 0],  // 26: Green Base Entry (yellow ring)
+        [7, 0],  // 27: Top center cap (arrow --> pointing right)
+        [8, 0],  // 28: Top outer right
+        // Down top arm right column
+        [8, 1],  // 29
+        [8, 2],  // 30
+        [8, 3],  // 31
+        [8, 4],  // 32
+        [8, 5],  // 33: Top inner right corner
+        // Right along right arm top row
+        [9, 6],  // 34: Right inner top corner
+        [10, 6], // 35
+        [11, 6], // 36
+        [12, 6], // 37
+        [13, 6], // 38: Pre-entry for Blue queue
+        // Right End Cap (Seat 1 Blue Base Entry at 39, moving DOWN to [14, 8])
+        [14, 6], // 39: Blue Base Entry (yellow ring)
+        [14, 7], // 40: Right center cap (moving down)
+        [14, 8], // 41: Right outer bottom
+        // Left along right arm bottom row
+        [13, 8], // 42
+        [12, 8], // 43
+        [11, 8], // 44
+        [10, 8], // 45
+        [9, 8],  // 46: Right inner bottom corner
+        // Down bottom arm right column
+        [8, 9],  // 47: Bottom inner right corner
+        [8, 10], // 48
+        [8, 11], // 49
+        [8, 12], // 50
+        [8, 13]  // 51: Pre-entry for Red queue
     ];
 
-    // 4 Queue positions per team (heading straight into center)
+    // 4 Inward Queue Rows (heading straight into center medallion)
     const QUEUE_COORDS = [
-        // Team 0 (bottom): heading up to center
+        // Seat 0 (Red, bottom arm): heading UP to center
         [[7, 13], [7, 12], [7, 11], [7, 10]],
-        // Team 1 (right): heading left to center
+        // Seat 1 (Blue, right arm): heading LEFT to center (matching Image 3 Blue row)
         [[13, 7], [12, 7], [11, 7], [10, 7]],
-        // Team 2 (top): heading down to center
+        // Seat 2 (Green, top arm): heading DOWN to center
         [[7, 1],  [7, 2],  [7, 3],  [7, 4]],
-        // Team 3 (left): heading right to center
+        // Seat 3 (Yellow, left arm): heading RIGHT to center
         [[1, 7],  [2, 7],  [3, 7],  [4, 7]]
     ];
 
-    // 4 Home base centers (the 45-degree diamond corner squares)
+    // 4 Corner Diamond Bases ("unique squares for each seat")
     const HOME_BASE_AREAS = [
-        { centerCol: 11.5, centerRow: 11.5 }, // Team 0: bottom-right
-        { centerCol: 11.5, centerRow: 2.5 },  // Team 1: top-right
-        { centerCol: 2.5,  centerRow: 2.5 },  // Team 2: top-left
-        { centerCol: 2.5,  centerRow: 11.5 }  // Team 3: bottom-left
+        { centerCol: 11.5, centerRow: 11.5 }, // Seat 0: Red (bottom-right)
+        { centerCol: 11.5, centerRow: 2.5 },  // Seat 1: Blue (top-right)
+        { centerCol: 2.5,  centerRow: 2.5 },  // Seat 2: Green (top-left)
+        { centerCol: 2.5,  centerRow: 11.5 }  // Seat 3: Yellow (bottom-left)
     ];
 
     // Exact socket coordinates for the 4 balls inside each diamond home base
-    // Matches Image 1 (top, right, bottom, left inside the rotated diamond)
     const HOME_COORDS = [
-        // Team 0 (bottom-right):
+        // Seat 0: Red (bottom-right)
         [[11.5, 10.5], [12.5, 11.5], [11.5, 12.5], [10.5, 11.5]],
-        // Team 1 (top-right):
+        // Seat 1: Blue (top-right)
         [[11.5, 1.5],  [12.5, 2.5],  [11.5, 3.5],  [10.5, 2.5]],
-        // Team 2 (top-left):
+        // Seat 2: Green (top-left)
         [[2.5, 1.5],   [3.5, 2.5],   [2.5, 3.5],   [1.5, 2.5]],
-        // Team 3 (bottom-left):
+        // Seat 3: Yellow (bottom-left)
         [[2.5, 10.5],  [3.5, 11.5],  [2.5, 12.5],  [1.5, 11.5]]
     ];
 
-    // Team entry points on the 52-space track
-    const ENTRY_POINTS = [0, 13, 26, 39];
+    // Base Entry Spaces on the 52-space track (Base Protection Spots)
+    const SEAT_ENTRY = { 0: 0, 1: 39, 2: 26, 3: 13 };
+    const ENTRY_POINTS = [0, 39, 26, 13];
 
     const TEAM_COLOUR_TEMPLATES = {
         red: 'rgba(229, 57, 53, ALPHA)',
@@ -153,6 +208,7 @@
     // ---------- STATE ----------
     let lastTurnNumber = null;
     let lastRound = null;
+    let currentHandRound = null;
     let question = null;
     let timerId = null;
     let pollId = null;
@@ -165,6 +221,50 @@
     let teamBoardMap = {};
     let piecesData = [];
     let initialAttemptId = 0;
+
+    // Load and render the 5 random cards dealt for the current round
+    async function loadPlayerHand(roundNumber) {
+        currentHandRound = roundNumber;
+        const res = await FJ.sendJson('GET', '/api/game/sessions/' + sessionId + '/hand');
+        if (res.ok && res.data && Array.isArray(res.data.hand)) {
+            renderPlayerHand(res.data.hand);
+        }
+    }
+
+    function renderPlayerHand(handCards) {
+        if (!cardButtonsBox) return;
+        cardButtonsBox.innerHTML = '';
+
+        handCards.forEach(function (card) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'card-pick-btn';
+            btn.dataset.cardId = card.card_id;
+            btn.dataset.cardName = card.card_name;
+            btn.dataset.handIndex = card.hand_index;
+
+            const img = document.createElement('img');
+            img.src = card.image || '/images/cards/card-back.svg';
+            img.alt = card.card_name;
+            img.width = 72;
+            img.height = 100;
+
+            const name = document.createElement('span');
+            name.className = 'card-pick-name';
+            name.textContent = card.card_name;
+
+            const effect = document.createElement('span');
+            effect.className = 'card-pick-effect';
+            effect.textContent = card.card_effect;
+
+            const scan = document.createElement('span');
+            scan.className = 'card-scan-label';
+            scan.textContent = 'SCAN TO UNLOCK';
+
+            btn.append(img, name, effect, scan);
+            cardButtonsBox.appendChild(btn);
+        });
+    }
 
     function showPanel(name) {
         Object.keys(panels).forEach(function (key) {
@@ -221,15 +321,27 @@
         for (let i = 0; i < 52; i++) {
             const coord = TRACK_COORDS[i];
             const space = document.createElement('div');
-            space.className = 'space' + (ENTRY_POINTS.includes(i) ? ' entry-space' : '');
+            const isEntry = ENTRY_POINTS.includes(i);
+            space.className = 'space' + (isEntry ? ' entry-space' : '');
             space.dataset.index = i;
+
+            // Directional indicators on turn caps (matching Image 3)
+            if (i === 1) space.title = 'Track: move left <--';
+            else if (i === 14) space.title = 'Track: move up ^';
+            else if (i === 27) space.title = 'Track: move right -->';
+            else if (i === 40) space.title = 'Track: move down v';
+
+            if (isEntry) {
+                space.title = 'Protected Base Entry Spot';
+            }
+
             const pos = gridToPercent(coord[0], coord[1]);
             space.style.left = pos.left;
             space.style.top = pos.top;
             boardEl.appendChild(space);
         }
 
-        // 3. Queue Spaces (4 teams x 4 slots, heading inward - matching Image 2)
+        // 3. Queue Spaces (4 seats x 4 slots, heading inward - matching Image 3)
         for (let t = 0; t < 4; t++) {
             const colour = defaultColours[t];
             for (let q = 0; q < 4; q++) {
@@ -237,6 +349,7 @@
                 const qSpace = document.createElement('div');
                 qSpace.className = 'space queue-space';
                 qSpace.dataset.teamIndex = t;
+                qSpace.dataset.seatIndex = t;
                 qSpace.dataset.team = colour;
                 qSpace.dataset.teamColour = colour;
                 qSpace.dataset.queueSlot = q + 1;
@@ -249,42 +362,25 @@
     }
 
     function applyTeamColoursToBoard(teams) {
-        if (!Array.isArray(teams)) return;
-        teams.forEach(function (team, idx) {
-            const boardIndex = idx % 4;
-            const colour = String(team.team_colour || '').toLowerCase();
-
-            const homeBase = boardEl.querySelector('.home-base[data-team-index="' + boardIndex + '"]');
-            if (homeBase) {
-                homeBase.dataset.teamColour = colour;
-                homeBase.style.backgroundColor = getRgbaColour(colour, 0.25);
-                homeBase.style.borderColor = getRgbaColour(colour, 0.6);
-            }
-
-            const qSpaces = boardEl.querySelectorAll('.queue-space[data-team-index="' + boardIndex + '"]');
-            qSpaces.forEach(function (qs) {
-                qs.dataset.team = colour;
-                qs.dataset.teamColour = colour;
-            });
-        });
+        // Bases have their authentic distinct colours: Red, Blue, Green, Yellow
     }
 
     // ---------- POSITION CALCULATIONS ----------
     function getPositionForPiece(piece) {
-        const boardIndex = teamBoardMap[piece.team_id] ?? 0;
+        const seatIndex = piece.seat_index !== undefined ? piece.seat_index : (teamBoardMap[piece.team_id] ?? 0);
         const pType = String(piece.position_type || '').toLowerCase();
 
         // 1. In corner diamond base ("square that contains the balls")
         if (pType === 'home') {
-            const slotIdx = Math.max(0, Math.min(3, (Number(piece.piece_number) || 1) - 1));
-            const coord = (HOME_COORDS[boardIndex] && HOME_COORDS[boardIndex][slotIdx]) || HOME_COORDS[0][0];
+            const slotIdx = Math.max(0, Math.min(3, ((Number(piece.piece_number) || 1) - 1) % 4));
+            const coord = (HOME_COORDS[seatIndex] && HOME_COORDS[seatIndex][slotIdx]) || HOME_COORDS[0][0];
             return gridToPercent(coord[0], coord[1]);
         }
 
         // 2. In queue / row heading into center
         if (pType === 'queue') {
             const qSlot = Math.max(0, Math.min(3, (Number(piece.position_index) || 1) - 1));
-            const coord = (QUEUE_COORDS[boardIndex] && QUEUE_COORDS[boardIndex][qSlot]) || QUEUE_COORDS[0][0];
+            const coord = (QUEUE_COORDS[seatIndex] && QUEUE_COORDS[seatIndex][qSlot]) || QUEUE_COORDS[0][0];
             return gridToPercent(coord[0], coord[1]);
         }
 
@@ -304,13 +400,15 @@
         pieces.forEach(function (piece) {
             seenIds.add(piece.piece_id);
             let marble = boardEl.querySelector('.marble[data-piece-id="' + piece.piece_id + '"]');
+            const colour = String(piece.seat_colour || piece.team_colour || 'red').toLowerCase();
 
             if (!marble) {
                 marble = document.createElement('div');
                 marble.className = 'marble';
                 marble.dataset.pieceId = piece.piece_id;
                 marble.dataset.teamId = piece.team_id;
-                marble.dataset.colour = String(piece.team_colour || '').toLowerCase();
+                marble.dataset.seatIndex = piece.seat_index ?? 0;
+                marble.dataset.colour = colour;
                 marble.title = (piece.team_name || 'Team') + ' piece #' + piece.piece_number;
 
                 marble.addEventListener('click', function () {
@@ -318,11 +416,10 @@
                 });
                 boardEl.appendChild(marble);
             } else {
-                if (piece.team_colour) {
-                    marble.dataset.colour = String(piece.team_colour).toLowerCase();
-                }
-                if (piece.team_id) {
-                    marble.dataset.teamId = piece.team_id;
+                marble.dataset.colour = colour;
+                marble.dataset.teamId = piece.team_id;
+                if (piece.seat_index !== undefined) {
+                    marble.dataset.seatIndex = piece.seat_index;
                 }
             }
 
@@ -356,6 +453,31 @@
         });
     }
 
+    // Check if moving piece's path would cross or land on a protected Base Entry space
+    // "when the ball stope in the places that I put arror the player whostoping canot move until put joker or wating for blue to move"
+    function isPathBlockedByBaseEntry(piece, spaces, isJoker) {
+        if (isJoker || spaces <= 0 || piece.position_type !== 'track') return false;
+
+        const blockedEntries = new Set();
+        piecesData.forEach(function (p) {
+            if (p.position_type === 'track') {
+                const pSeat = p.seat_index ?? 0;
+                const baseEntry = SEAT_ENTRY[pSeat];
+                if (p.position_index === baseEntry && p.piece_id !== piece.piece_id) {
+                    blockedEntries.add(baseEntry);
+                }
+            }
+        });
+
+        for (let s = 1; s <= spaces; s++) {
+            const checkIndex = (piece.position_index + s) % 52;
+            if (blockedEntries.has(checkIndex)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function highlightMarbles(mode) {
         clearHighlights();
         if (!mode || !boardEl) return;
@@ -371,9 +493,15 @@
                 .map(function (p) { return p.piece_id; });
         } else if (mode.action === 'move') {
             // Own team marbles on track or in queue
+            const isJoker = (currentCard && currentCard.name && currentCard.name.toLowerCase() === 'joker');
             validPieceIds = piecesData
                 .filter(function (p) {
-                    return p.team_id === myTeamId && (p.position_type === 'track' || p.position_type === 'queue');
+                    if (p.team_id !== myTeamId) return false;
+                    if (p.position_type !== 'track' && p.position_type !== 'queue') return false;
+                    if (p.position_type === 'track' && isPathBlockedByBaseEntry(p, mode.spaces, isJoker)) {
+                        return false;
+                    }
+                    return true;
                 })
                 .map(function (p) { return p.piece_id; });
         } else if (mode.action === 'swap') {
@@ -400,7 +528,7 @@
         });
 
         if (validPieceIds.length === 0 && selectMarbleHint) {
-            selectMarbleHint.textContent = 'No eligible marbles available for this move.';
+            selectMarbleHint.textContent = 'No eligible marbles available for this move (or path is blocked by base entry).';
         }
     }
 
@@ -432,37 +560,59 @@
         clearMessage();
         if (!lastResult) return;
 
+        const cardName = (currentCard && currentCard.name) || (lastResult && lastResult.card_name) || '';
+        const norm = cardName.trim().toLowerCase();
+        const canExit = ['ace', 'king', 'joker'].includes(norm);
+
+        const myMarbles = piecesData.filter(function (p) { return p.team_id === myTeamId; });
+        const hasTrackOrQueue = myMarbles.some(function (p) { return p.position_type === 'track' || p.position_type === 'queue'; });
+
+        // If all marbles are still in home base, only Ace, King, or Joker can exit!
+        if (!hasTrackOrQueue && !canExit) {
+            FJ.showMessage(gameMessage, 'All your marbles are at home! Only Ace, King, or Joker can exit a marble onto the track.', 'info');
+            showPanel('result');
+            return;
+        }
+
         if (!lastResult.is_correct) {
-            // Basic move: 1 forward
+            // Basic move: 1 forward, but CANNOT exit from home
+            if (!hasTrackOrQueue) {
+                FJ.showMessage(gameMessage, 'Basic move is 1 forward, but only Ace, King, or Joker can exit from home. No move possible.', 'info');
+                showPanel('result');
+                return;
+            }
             enterMoveMode('move', 1);
             return;
         }
 
-        const cardName = (currentCard && currentCard.name) || (lastResult && lastResult.card_name) || '';
-        const norm = cardName.trim().toLowerCase();
+        // If player has marbles ONLY at home, and has an exit card, automatically enter move mode so home balls glow!
+        if (!hasTrackOrQueue && canExit) {
+            enterMoveMode('enter', 0);
+            return;
+        }
 
         if (norm === 'ace') {
             showMoveChoices([
-                { label: 'Enter from home', action: 'enter', spaces: 0 },
-                { label: 'Move 1 space', action: 'move', spaces: 1 },
-                { label: 'Move 11 spaces', action: 'move', spaces: 11 }
+                { label: 'Enter from home base', action: 'enter', spaces: 0 },
+                { label: 'Move 1 space forward', action: 'move', spaces: 1 },
+                { label: 'Move 11 spaces forward', action: 'move', spaces: 11 }
             ]);
         } else if (norm === 'king') {
             showMoveChoices([
-                { label: 'Enter from home', action: 'enter', spaces: 0 },
-                { label: 'Move 13 spaces', action: 'move', spaces: 13 }
+                { label: 'Enter from home base', action: 'enter', spaces: 0 },
+                { label: 'Move 13 spaces forward', action: 'move', spaces: 13 }
+            ]);
+        } else if (norm === 'joker') {
+            showMoveChoices([
+                { label: 'Enter from home base', action: 'enter', spaces: 0 },
+                { label: 'Wild Move 1 space (bypass blockades)', action: 'move', spaces: 1 }
             ]);
         } else if (norm === 'jack') {
             enterSwapMode();
         } else if (norm === '10') {
-            showMoveChoices([
-                { label: 'Move 10 forward', action: 'move', spaces: 10 },
-                { label: 'Force left player to discard', action: 'move', spaces: 10 }
-            ]);
+            enterMoveMode('move', 10);
         } else if (norm === '7') {
-            showMoveChoices([
-                { label: 'Move 7 spaces', action: 'move', spaces: 7 }
-            ]);
+            enterMoveMode('move', 7);
         } else if (norm === '5') {
             enterMoveMode('move', 5);
         } else if (norm === '4') {
@@ -544,12 +694,26 @@
             if (piece.team_id !== myTeamId) return;
             if (moveMode.action === 'enter' && piece.position_type !== 'home') return;
             if (moveMode.action === 'move' && piece.position_type !== 'track' && piece.position_type !== 'queue') return;
+
+            // Check if path is blocked by an occupied Base Entry
+            if (moveMode.action === 'move' && piece.position_type === 'track') {
+                const isJoker = (currentCard && currentCard.name && currentCard.name.toLowerCase() === 'joker');
+                if (isPathBlockedByBaseEntry(piece, moveMode.spaces, isJoker)) {
+                    FJ.showMessage(gameMessage, 'Movement blocked: A marble is protecting its base entry spot. You cannot pass until a Joker is played or that marble moves.', 'error');
+                    FJ.playSound('wrong');
+                    return;
+                }
+            }
         }
 
+        const isJoker = (currentCard && currentCard.name && currentCard.name.toLowerCase() === 'joker');
+        const cardName = (currentCard && currentCard.name) || (lastResult && lastResult.card_name) || '';
         const body = {
             piece_id: moveMode.action === 'swap' ? moveMode.selectedOwn : pieceId,
             action: moveMode.action,
-            spaces: moveMode.spaces || 0
+            spaces: moveMode.spaces || 0,
+            card_name: cardName,
+            is_joker: isJoker
         };
 
         if (moveMode.action === 'swap') {
@@ -565,6 +729,7 @@
             if (result.data && result.data.pieces) {
                 updatePieces(result.data.pieces);
             }
+            logActivity((piece.team_name || 'Team') + ' moved ' + (moveMode.action === 'enter' ? 'onto board' : moveMode.spaces + ' spaces'));
             if (result.data && result.data.won) {
                 const infoRes = await FJ.sendJson('GET', '/api/sessions/' + sessionId);
                 showFinished(infoRes.ok && infoRes.data ? infoRes.data.teams : []);
@@ -596,6 +761,11 @@
             centerCardImg.src = cardImg.src;
             centerCardImg.hidden = false;
             if (centerBrand) centerBrand.hidden = true;
+        }
+
+        if (clickedCardBtn) {
+            clickedCardBtn.disabled = true;
+            clickedCardBtn.style.opacity = '0.35';
         }
 
         // 2. Query current latest attempt to prevent triggering on old attempts
@@ -825,17 +995,30 @@
 
         FJ.playSound(data.is_correct ? 'correct' : (timedOut ? 'timeup' : 'wrong'));
         showPanel('result');
+        startMoveFlow();
         refresh();
     }
 
     // ---------- TURNS & LEADERBOARD ----------
+    function logActivity(text) {
+        const list = $('#activity-list');
+        if (!list) return;
+        const item = document.createElement('li');
+        item.className = 'activity-item';
+        item.textContent = text;
+        list.prepend(item);
+        if (list.children.length > 6) {
+            list.lastElementChild.remove();
+        }
+    }
+
     function updateScores(teams) {
         if (!Array.isArray(teams)) return;
         teams.forEach(function (team) {
-            const scoreEl = document.querySelector('.score-team[data-team-id="' + team.team_id + '"] [data-score]');
-            if (scoreEl) {
-                scoreEl.textContent = team.current_score;
-            }
+            const scoreEls = document.querySelectorAll('[data-team-id="' + team.team_id + '"] [data-score], .score-team[data-team-id="' + team.team_id + '"] [data-score]');
+            scoreEls.forEach(function (el) {
+                el.textContent = team.current_score;
+            });
         });
     }
 
@@ -845,16 +1028,30 @@
         const isMe = !!current && current.user_id === myUserId;
 
         if (roundInfo) {
-            roundInfo.textContent = 'Round ' + state.round_number + ' - Turn ' + state.turn_number;
+            roundInfo.textContent = 'Round ' + state.round_number + ' • Turn ' + state.turn_number;
+        }
+
+        // Deal 5 fresh random cards when round changes
+        if (state.round_number && state.round_number !== currentHandRound) {
+            loadPlayerHand(state.round_number);
+        }
+
+        const sidebarPlayer = $('#sidebar-player-name');
+        if (sidebarPlayer) {
+            if (!current) {
+                sidebarPlayer.textContent = 'Waiting...';
+            } else {
+                sidebarPlayer.textContent = current.full_name + ' • ' + (current.team_name || 'Team');
+            }
         }
 
         if (banner) {
             if (!current) {
                 banner.textContent = 'Waiting for the next turn...';
             } else if (isMe) {
-                banner.textContent = 'Your turn! Pick a card to play';
+                banner.textContent = 'Your turn!';
             } else if (isMyTeam) {
-                banner.textContent = current.full_name + '\'s turn (your team can answer)';
+                banner.textContent = current.full_name + '\'s turn (your team)';
             } else {
                 banner.textContent = current.full_name + '\'s turn (' + current.team_name + ')';
             }
@@ -977,6 +1174,20 @@
                 const cardId = Number(btn.dataset.cardId);
                 const cardName = btn.dataset.cardName;
                 onCardSelected(cardId, cardName);
+            }
+        });
+    }
+
+    const btnScanCard = $('#btn-scan-card');
+    if (btnScanCard) {
+        btnScanCard.addEventListener('click', function () {
+            const enabledBtn = cardButtonsBox ? cardButtonsBox.querySelector('.card-pick-btn:not(:disabled)') : null;
+            if (enabledBtn) {
+                const cardId = Number(enabledBtn.dataset.cardId);
+                const cardName = enabledBtn.dataset.cardName;
+                onCardSelected(cardId, cardName);
+            } else {
+                FJ.showMessage(gameMessage, 'Please select a card from your hand or wait for your turn to scan.', 'info');
             }
         });
     }

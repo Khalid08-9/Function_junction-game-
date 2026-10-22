@@ -59,30 +59,117 @@ a {
 .ribbon-yellow { background: #f5c52b; }
 .ribbon-pink { background: var(--pink); }
 
-/* ---------- Header ---------- */
+/* ---------- Header (Storyboard Alignment) ---------- */
 .site-header {
+    background: #190c29;
+    border-bottom: 2px solid rgba(245, 197, 43, 0.25);
+    padding: 12px 24px;
+    width: 100%;
+}
+
+.header-inner {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    padding: 14px 16px;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .brand {
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    line-height: 1.1;
+}
+
+.brand-name {
     color: var(--gold);
-    font-size: 1.5rem;
+    font-size: 1.6rem;
     font-weight: 900;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.brand-sub {
+    color: #00e5ff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
+.header-nav {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+}
+
+.header-nav a {
+    color: #ffffff;
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
     text-decoration: none;
+    transition: color 0.15s, transform 0.15s;
+}
+
+.header-nav a:hover {
+    color: var(--gold);
+    transform: translateY(-1px);
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
 }
 
 .user-box {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     font-size: 0.9rem;
+    color: var(--cream);
+}
+
+.user-name {
+    font-weight: 700;
+}
+
+.btn-logout {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background 0.15s;
+}
+
+.btn-logout:hover {
+    background: var(--pink);
+    border-color: var(--pink);
+}
+
+.role-pill {
+    display: inline-block;
+    padding: 6px 20px;
+    border-radius: 999px;
+    background: var(--pink);
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    box-shadow: 0 4px 12px rgba(233, 30, 99, 0.45);
+    text-decoration: none;
 }
 
 .role-tag {
@@ -815,11 +902,241 @@ a:focus-visible {
 }
 
 
+/* ---------- Storyboard Game Room Layout (Image 2 Alignment) ---------- */
+.turn-score-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: #fdf5e6;
+    border: 3px solid #d4a359;
+    border-radius: 20px;
+    padding: 10px 24px;
+    margin: 8px 0 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.banner-team-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 24px;
+    border-radius: 999px;
+    font-size: 1rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #ffffff;
+}
+
+.banner-team-pill.team-left {
+    background: #e91e63;
+    box-shadow: 0 4px 12px rgba(233, 30, 99, 0.4);
+}
+
+.banner-team-pill.team-right {
+    background: #00bcd4;
+    box-shadow: 0 4px 12px rgba(0, 188, 212, 0.4);
+}
+
+.team-pill-name {
+    font-weight: 800;
+}
+
+.team-pill-sep {
+    opacity: 0.7;
+}
+
+.team-pill-score {
+    font-size: 1.15rem;
+    font-weight: 900;
+}
+
+.banner-turn-center {
+    text-align: center;
+}
+
+.main-turn-title {
+    margin: 0;
+    font-size: 1.65rem;
+    font-weight: 900;
+    color: #4a1525;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+
+.round-sub-info {
+    margin: 2px 0 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #8d4f19;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Two-Column Storyboard Layout */
+.game-two-col {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 22px;
+    align-items: start;
+    width: 100%;
+}
+
+.game-board-container {
+    background: #24133b;
+    border: 4px solid #6b3310;
+    border-radius: 24px;
+    padding: 16px 20px 22px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5), inset 0 0 30px rgba(0,0,0,0.3);
+}
+
+.board-header-bar {
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.board-title {
+    margin: 0;
+    font-size: 1.85rem;
+    font-weight: 900;
+    color: #f5c52b;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    text-shadow: 0 3px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* Sidebar Storyboard Control Panel */
+.game-sidebar {
+    width: 100%;
+}
+
+.sidebar-card {
+    background: #fdf5e6;
+    border: 3px solid #d4a359;
+    border-radius: 20px;
+    padding: 22px;
+    color: var(--ink);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.sidebar-header {
+    border-bottom: 2px dashed rgba(43, 26, 20, 0.2);
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+}
+
+.sidebar-tag {
+    display: block;
+    color: #e91e63;
+    font-size: 0.75rem;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.sidebar-turn-player {
+    margin: 0;
+    color: #2b1a14;
+    font-size: 1.45rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.badge-row {
+    margin-bottom: 12px;
+}
+
+.badge-strong-cards {
+    display: inline-block;
+    background: #e91e63;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 0.75rem;
+    padding: 4px 18px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    box-shadow: 0 3px 8px rgba(233, 30, 99, 0.35);
+}
+
+.card-scan-label {
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: #00897b;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
+.action-buttons-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.btn-action-teal {
+    background: #00bfa5;
+    color: #ffffff;
+    font-size: 0.95rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    border: none;
+    border-radius: 999px;
+    padding: 12px 24px;
+    width: 100%;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 191, 165, 0.35);
+    transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
+    text-align: center;
+}
+
+.btn-action-teal:hover {
+    background: #00a892;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 191, 165, 0.5);
+}
+
+.recent-activity-panel {
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 2px dashed rgba(43, 26, 20, 0.2);
+}
+
+.activity-title {
+    margin: 0 0 10px;
+    color: #e91e63;
+    font-size: 0.8rem;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.activity-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.activity-item {
+    font-size: 0.82rem;
+    color: #4a2d18;
+    font-weight: 600;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 6px;
+}
+
 /* ---------- Jackaroo Board ---------- */
 .board-wrapper {
     display: flex;
     justify-content: center;
-    padding: 10px 0;
+    padding: 6px 0;
 }
 
 .board {
@@ -847,11 +1164,12 @@ a:focus-visible {
     z-index: 1;
 }
 
-/* Track entry holes */
+/* Track entry holes (Base Entry Spots with Yellow Protection Ring) */
 .space.entry-space {
     background: radial-gradient(circle at 45% 45%, #2a1405 0%, #452109 70%, #633210 100%);
-    border: 2px solid #ffc83d;
-    box-shadow: 0 0 10px rgba(255, 200, 61, 0.6), inset 0 2px 4px rgba(0, 0, 0, 0.85);
+    border: 3px solid #ffeb3b;
+    box-shadow: 0 0 14px 2px rgba(255, 235, 59, 0.8), inset 0 2px 4px rgba(0, 0, 0, 0.85);
+    z-index: 3;
 }
 
 /* 4-Hole Queue Row (matching Image 2) */

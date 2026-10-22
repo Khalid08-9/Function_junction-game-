@@ -12,19 +12,43 @@ function shuffle(items) {
     return list;
 }
 
-// Saves a new random order of ALL players of the session for one round.
-// Returns the players in their new order.
+// Creates round turns where teams alternate strictly:
+// Team 1 Player 1 -> Team 2 Player 1 -> Team 1 Player 2 -> Team 2 Player 2
+// Teammates play AFTER the opposing team.
 async function createRound(connection, sessionId, roundNumber) {
     const [players] = await connection.execute(
         `SELECT tm.user_id, tm.team_id, u.full_name
          FROM team_members tm
          JOIN teams t ON t.team_id = tm.team_id
          JOIN users u ON u.user_id = tm.user_id
-         WHERE t.session_id = ?`,
+         WHERE t.session_id = ?
+         ORDER BY tm.team_id, tm.user_id`,
         [sessionId]
     );
 
-    const order = shuffle(players);
+    const [teams] = await connection.execute(
+        `SELECT team_id FROM teams WHERE session_id = ? ORDER BY team_id`,
+        [sessionId]
+    );
+
+    let order = [];
+    if (teams.length >= 2) {
+        const team1Players = players.filter(p => p.team_id === teams[0].team_id);
+        const team2Players = players.filter(p => p.team_id === teams[1].team_id);
+
+        // Alternate starting team across rounds
+        const startWithTeam1 = (roundNumber % 2 !== 0);
+        const firstTeam = startWithTeam1 ? team1Players : team2Players;
+        const secondTeam = startWithTeam1 ? team2Players : team1Players;
+
+        const maxCount = Math.max(firstTeam.length, secondTeam.length);
+        for (let i = 0; i < maxCount; i++) {
+            if (firstTeam[i]) order.push(firstTeam[i]);
+            if (secondTeam[i]) order.push(secondTeam[i]);
+        }
+    } else {
+        order = players;
+    }
 
     for (let i = 0; i < order.length; i++) {
         await connection.execute(

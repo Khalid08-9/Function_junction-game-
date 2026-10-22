@@ -502,4 +502,27 @@ async function getLeaderboard(req, res) {
     }
 }
 
-module.exports = { submitAnswer, getLeaderboard, getCardQr, getLatestAttempt, submitMobileAnswer };
+/* ---------- Hand of 5 Random Cards per Round ---------- */
+const { getPlayerHand } = require("../services/cardService");
+
+async function getHand(req, res) {
+    const sessionId = Number(req.params.sessionId);
+    const userId = req.session && req.session.user ? req.session.user.user_id : null;
+
+    if (!isPositiveInteger(sessionId)) {
+        return res.status(400).json({ message: "Session ID must be a positive whole number." });
+    }
+    if (!userId) {
+        return res.status(401).json({ message: "User not authenticated." });
+    }
+
+    try {
+        const result = await getPlayerHand(sessionId, userId);
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error("Get hand error:", error.message);
+        return res.status(500).json({ message: "Could not load cards." });
+    }
+}
+
+module.exports = { submitAnswer, getLeaderboard, getCardQr, getLatestAttempt, submitMobileAnswer, getHand };

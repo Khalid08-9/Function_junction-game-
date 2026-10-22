@@ -21,13 +21,17 @@ html(lang="en")
           a(href="#") LEADERBOARD
         .header-actions
           button#sound-toggle.icon-button(type="button", aria-label="Turn sound off")
-            img(src="/images/icons/sound-on.svg", alt="", width="24", height="24")
+            img(src="/images/icons/sound-on.svg", alt="", width="22", height="22")
           if currentUser
             .user-box
               span.user-name= currentUser.full_name
-              button#logout-button.btn.btn-small.btn-pink(type="button") Log out
+              button#logout-button.btn.btn-small.btn-logout(type="button") Log out
             if currentUser.role === "student"
-              a.btn.btn-pink.btn-small(href="/play") STUDENT
+              span.role-pill STUDENT
+            else if currentUser.role === "lecturer"
+              span.role-pill LECTURER
+          else
+            a.role-pill(href="/login") Log In
     main.page
       block content
     script(src="/js/common.js")

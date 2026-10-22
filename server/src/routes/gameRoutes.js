@@ -2,13 +2,16 @@ const express = require("express");
 const router = express.Router();
 
 const { requireLogin, requireRole } = require("../middleware/authMiddleware");
-const { submitAnswer, getLeaderboard, getCardQr, getLatestAttempt, submitMobileAnswer } = require("../controllers/gameController");
+const { submitAnswer, getLeaderboard, getCardQr, getLatestAttempt, submitMobileAnswer, getHand } = require("../controllers/gameController");
 const { getTurnState, endTurn } = require("../controllers/turnController");
 const { getSummary } = require("../controllers/dashboardController");
 const { getPieces, movePiece } = require("../controllers/pieceController");
 
 // Student only
 router.post("/answers", requireLogin, requireRole("student"), submitAnswer);
+
+// Hand of 5 random cards per round
+router.get("/sessions/:sessionId/hand", requireLogin, getHand);
 
 // Mobile answer (called from scanned phone)
 router.post("/mobile-answer", submitMobileAnswer);

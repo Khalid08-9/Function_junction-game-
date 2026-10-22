@@ -9,17 +9,7 @@ const {
 } = require("../services/sessionService");
 const { getSummaryData } = require("../services/dashboardService");
 const { homeFor } = require("../middleware/pageAuth");
-
-// Card faces that live in client/public/images/cards
-const CARD_FACES = new Set(["ace", "king", "jack", "joker", "10", "4", "5", "7"]);
-
-function cardImage(cardName) {
-    const slug = String(cardName).toLowerCase().replace(/[^a-z0-9]+/g, "-");
-
-    return CARD_FACES.has(slug)
-        ? "/images/cards/" + slug + ".svg"
-        : "/images/cards/card-back.svg";
-}
+const { getPlayerHand, cardImage } = require("../services/cardService");
 
 function showNotFound(res) {
     return res.status(404).render("error", {
@@ -111,24 +101,17 @@ async function showGame(req, res) {
         return showNotFound(res);
     }
 
-    const [cards] = await pool.execute(
-        `SELECT card_id, card_name, card_effect, difficulty
-         FROM cards
-         WHERE is_active = 1
-         ORDER BY card_id`
-    );
-
     const myTeam = teams.find((team) =>
         team.members.some((member) => member.user_id === user.user_id)
     ) || null;
+
+    const { hand } = await getPlayerHand(session.session_id, user.user_id);
 
     return res.render("game", {
         pageTitle: "Game room - " + session.session_code,
         session,
         teams,
-        cards: cards.map(function (card) {
-            return { ...card, image: cardImage(card.card_name) };
-        }),
+        cards: hand,
         questionSeconds: Number(process.env.QUESTION_SECONDS) || 30,
         myTeam: myTeam || null,
         currentUser: user
