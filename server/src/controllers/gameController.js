@@ -85,11 +85,26 @@ async function submitAnswer(req, res) {
             return res.status(409).json({ message: "This session is not active." });
         }
 
-        // 2b. Only the team whose turn it is can answer (any teammate may answer)
-        if (currentTeamId !== teamId) {
+        // 2b. Only the player whose turn it is can answer (strictly enforce turn owner)
+        const [[roundInfo]] = await connection.execute(
+            `SELECT MAX(round_number) AS round_number FROM round_turns WHERE session_id = ?`,
+            [sessionId]
+        );
+        const roundNumber = roundInfo ? roundInfo.round_number : 1;
+
+        const [waiting] = await connection.execute(
+            `SELECT rt.round_turn_id, rt.user_id, u.full_name
+             FROM round_turns rt
+             JOIN users u ON u.user_id = rt.user_id
+             WHERE rt.session_id = ? AND rt.round_number = ? AND rt.played_at IS NULL
+             ORDER BY rt.turn_order`,
+            [sessionId, roundNumber]
+        );
+
+        if (waiting.length === 0 || waiting[0].user_id !== userId) {
             await connection.rollback();
             return res.status(403).json({
-                message: "It is not your team's turn."
+                message: `It is not your turn! Waiting for ${waiting[0] ? waiting[0].full_name : 'another player'} to play.`
             });
         }
 
@@ -346,28 +361,36 @@ async function submitMobileAnswer(req, res) {
         connection = await pool.getConnection();
         await connection.beginTransaction();
 
-        // If userId not present, find active team's member or active player in session
-        if (!userId) {
-            if (teamId) {
-                const [tm] = await connection.execute(
-                    `SELECT user_id FROM team_members WHERE team_id = ? LIMIT 1`,
-                    [teamId]
-                );
-                if (tm.length > 0) userId = tm[0].user_id;
-            } else {
-                const [gs] = await connection.execute(
-                    `SELECT st.current_team_id, tm.user_id
-                     FROM game_state st
-                     JOIN team_members tm ON tm.team_id = st.current_team_id
-                     WHERE st.session_id = ? LIMIT 1`,
-                    [sessionId]
-                );
-                if (gs.length > 0) {
-                    teamId = gs[0].current_team_id;
-                    userId = gs[0].user_id;
-                }
-            }
+        // Enforce that only the current active player can answer
+        const [[roundInfo]] = await connection.execute(
+            `SELECT MAX(round_number) AS round_number FROM round_turns WHERE session_id = ?`,
+            [sessionId]
+        );
+        const roundNumber = roundInfo ? roundInfo.round_number : 1;
+
+        const [waiting] = await connection.execute(
+            `SELECT rt.round_turn_id, rt.user_id, u.full_name, rt.team_id
+             FROM round_turns rt
+             JOIN users u ON u.user_id = rt.user_id
+             WHERE rt.session_id = ? AND rt.round_number = ? AND rt.played_at IS NULL
+             ORDER BY rt.turn_order`,
+            [sessionId, roundNumber]
+        );
+
+        if (waiting.length === 0) {
+            await connection.rollback();
+            return res.status(400).json({ message: "No active turn." });
         }
+
+        const activePlayer = waiting[0];
+        if (userId && activePlayer.user_id !== userId) {
+            await connection.rollback();
+            return res.status(403).json({
+                message: `It is not your turn! It is currently ${activePlayer.full_name}'s turn.`
+            });
+        }
+        userId = activePlayer.user_id;
+        teamId = activePlayer.team_id;
 
         if (!userId || !teamId) {
             await connection.rollback();

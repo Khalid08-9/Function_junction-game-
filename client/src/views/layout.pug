@@ -17,8 +17,10 @@ html(lang="en")
           span.brand-sub CODE &bull; CARDS &bull; TEAMWORK
         nav.header-nav
           a(href="/play") PLAY
-          a(href="#") HOW TO PLAY
-          a(href="#") LEADERBOARD
+          a(href="/how-to-play") HOW TO PLAY
+          a(href="/leaderboard") LEADERBOARD
+          if currentUser && currentUser.role === "lecturer"
+            a(href="/lecturer") DASHBOARD
         .header-actions
           button#sound-toggle.icon-button(type="button", aria-label="Turn sound off")
             img(src="/images/icons/sound-on.svg", alt="", width="22", height="22")

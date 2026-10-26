@@ -210,6 +210,24 @@ async function showMobileQuestion(req, res) {
     });
 }
 
+function showHowToPlay(req, res) {
+    return res.render("how-to-play", {
+        pageTitle: "How to Play",
+        currentUser: req.session.user || null
+    });
+}
+
+function showLeaderboardPage(req, res) {
+    const user = req.session.user;
+    if (user && user.role === "lecturer") {
+        return res.redirect("/lecturer");
+    }
+    if (user && user.role === "student") {
+        return res.redirect("/play");
+    }
+    return res.redirect("/login");
+}
+
 module.exports = {
     showNotFound,
     showHome,
@@ -221,5 +239,7 @@ module.exports = {
     showSession,
     showGame,
     showDashboard,
-    showMobileQuestion
+    showMobileQuestion,
+    showHowToPlay,
+    showLeaderboardPage
 };

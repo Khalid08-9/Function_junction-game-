@@ -50,7 +50,7 @@ block content
           //- 1. Card selection bar
           section#panel-cards.game-panel
             .badge-row
-              span.badge-strong-cards STRONG CARDS
+              span.badge-strong-cards CARDS IN HAND
             
             .cards-row#card-buttons
               each card in cards
@@ -62,6 +62,7 @@ block content
             
             .action-buttons-row
               button#btn-scan-card.btn.btn-action-teal(type='button') SCAN CARD
+              button#btn-discard-card.btn.btn-action-teal(type='button', hidden) DISCARD & PASS
               button#end-turn-button.btn.btn-action-teal(type='button', hidden) END TURN
             
             p#turn-hint.hint(aria-live='polite')

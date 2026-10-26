@@ -37,11 +37,19 @@ async function loadTurnState(db, sessionId) {
 
     const current = turns.find((turn) => turn.played_at === null) || null;
 
+    let actionText = states[0].last_action || "";
+    try {
+        const parsed = JSON.parse(actionText);
+        if (parsed && typeof parsed === "object" && parsed.text) {
+            actionText = parsed.text;
+        }
+    } catch (e) {}
+
     return {
         session_id: sessionId,
         round_number: round.round_number,
         turn_number: states[0].turn_number,
-        last_action: states[0].last_action,
+        last_action: actionText,
         current_player: current && {
             user_id: current.user_id,
             full_name: current.full_name,

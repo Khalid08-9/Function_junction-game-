@@ -1,0 +1,184 @@
+extends layout
+
+block content
+  .how-to-play-container
+    //- Header Banner
+    section.card.how-to-play-hero
+      .hero-content
+        span.badge.badge-gold GAME GUIDE &amp; RULES
+        h1.title How to Play Function Junction
+        p.subtitle Master Python concepts while competing on the authentic 4-player Jackaroo board!
+        .hero-buttons-row
+          if currentUser && currentUser.role === "lecturer"
+            a.btn.btn-teal(href="/lecturer") 📊 Open Lecturer Dashboard
+          else
+            a.btn(href="/play") 🎮 Enter Game Room
+          a.btn.btn-pink(href="#cards-guide") 🃏 View Card Powers
+
+    //- 1. Overview & Teams
+    section.card.guide-section
+      h2.section-heading
+        span.step-num 1
+        |  Game Overview &amp; Partnership
+      p.guide-text
+        strong Jackaroo
+        |  is a 4-player strategic partnership game played on a circular wooden track. Players form two opposing teams:
+      .teams-grid-preview
+        .team-preview-card.team-sun
+          h3 ☀️ Team Sun (Red &amp; Green)
+          p Seat 0 (Red, bottom-right) &bull; Seat 2 (Green, top-left)
+          span.hint Teammates sit opposite each other!
+        .team-preview-card.team-sky
+          h3 🌊 Team Sky (Blue &amp; Yellow)
+          p Seat 1 (Blue, top-right) &bull; Seat 3 (Yellow, bottom-left)
+          span.hint Teammates sit opposite each other!
+      p.guide-text
+        | The game uses a standard deck of 
+        strong 52 cards without Jokers
+        | . There are 16 playing pieces (marbles) in total—4 pieces per player, meaning each team must safely navigate 
+        strong 8 marbles
+        |  into their Safe Zone to win!
+
+    //- 2. The 4 Game Zones
+    section.card.guide-section
+      h2.section-heading
+        span.step-num 2
+        |  The Game Zones
+      .zones-grid
+        .zone-box
+          .zone-icon 🏠
+          h3 Home Zone
+          p 4 corner bases (Red, Blue, Green, Yellow). Where your 4 marbles begin the match.
+        .zone-box
+          .zone-icon 🏁
+          h3 Base Zone
+          p The starting spot on the perimeter track. A marble on its own Base is completely protected!
+        .zone-box
+          .zone-icon 🛣️
+          h3 Track Zone
+          p The 52 common spaces forming the perimeter loop that marbles travel around clockwise.
+        .zone-box
+          .zone-icon 🛡️
+          h3 Safe Zone
+          p 4 private slots heading straight into the center medallion. Once inside, marbles are safe from captures.
+
+    //- 3. Card Powers in Jackaroo
+    section.card.guide-section#cards-guide
+      h2.section-heading
+        span.step-num 3
+        |  Card Powers in Jackaroo
+      p.guide-text
+        | Jackaroo cards have special tactical actions. Answer Python questions to unlock their full power!
+      
+      .cards-rules-table
+        .card-rule-row
+          .card-badge.badge-ace ACE
+          .card-rule-body
+            strong Exit Home to Base OR Advance 1 / 11 Spaces
+            p Can move any marble from your Home Base onto the track, or advance a marble already on the track forward by 1 or 11 spaces.
+        
+        .card-rule-row
+          .card-badge.badge-king KING
+          .card-rule-body
+            strong Exit Home to Base (Only)
+            p Moves any marble from your Home Base onto your Base entry spot. King is dedicated to exiting marbles onto the board!
+
+        .card-rule-row
+          .card-badge.badge-jack JACK
+          .card-rule-body
+            strong Swap Opponent's Marble
+            p Swaps one of your marbles on the track with an opponent's marble on the track. Neither marble can be in Home, Base, or Safe zones!
+
+        .card-rule-row
+          .card-badge.badge-seven 7
+          .card-rule-body
+            strong Split Movement Between Two Marbles
+            p Move one marble 7 spaces forward, or split the 7 spaces between two of your marbles (e.g. 4+3, 5+2, 6+1).
+
+        .card-rule-row
+          .card-badge.badge-four 4
+          .card-rule-body
+            strong Move 4 Spaces Backward
+            p Moves one of your track marbles 4 spaces backwards (-4). Perfect for tactical retreats and quick positioning!
+
+        .card-rule-row
+          .card-badge.badge-regular OTHER CARDS
+          .card-rule-body
+            strong Standard Forward Movement (2, 3, 5, 6, 8, 9, 10, Queen)
+            p Advances one of your marbles forward by the card's face value (Queen moves 12 spaces).
+
+    //- 4. Special Rules & Tactics
+    section.card.guide-section
+      h2.section-heading
+        span.step-num 4
+        |  Special Rules &amp; Protection
+      ul.rules-bullet-list
+        li
+          strong 💥 Landing Capture: 
+          | If your marble lands on another marble (whether an opponent or teammate), the occupant is captured and immediately sent back to its Home!
+        li
+          strong 🛡️ Protected Base: 
+          | A marble on its own Base cannot be bypassed (jumped over), captured, or swapped. Other players cannot pass until it moves!
+        li
+          strong 👥 Consecutive Pieces Rule: 
+          | When two playing pieces are adjacent (consecutive spaces on the track), the front piece is considered a "Base" and cannot be bypassed, captured, or swapped!
+        li
+          strong 🎯 Safe Zone Exact Entry: 
+          | To enter the Safe Zone, your card's value must allow the marble to land directly inside slots 1..4. You cannot overshoot the Safe Zone!
+        li
+          strong 🏆 Win Condition: 
+          | The first team to successfully guide all 8 marbles into their Safe Zone wins the match!
+
+    //- 5. Questions & QR Flow
+    section.card.guide-section
+      h2.section-heading
+        span.step-num 5
+        |  QR Scanning &amp; Python Questions
+      .qr-guide-steps
+        .qr-step
+          span.step-circle 1
+          h4 Select Card
+          p On your turn, pick a card from your 5-card hand.
+        .qr-step
+          span.step-circle 2
+          h4 Scan with Phone
+          p Scan the on-screen QR code with your phone camera (or choose desktop answer).
+        .qr-step
+          span.step-circle 3
+          h4 Answer Python Question
+          p Answer correctly to unlock the card's full power. Wrong answers give basic move (1 step).
+        .qr-step
+          span.step-circle 4
+          h4 Automatic Turn Pass
+          p Move your marble. Your turn completes automatically and passes to the next player!
+
+    //- 6. Lecturer Dashboard Guide
+    section.card.guide-section.lecturer-guide-highlight
+      h2.section-heading
+        span.step-num 6
+        |  Lecturer Dashboard &amp; Classroom Management
+      p.guide-text
+        | Function Junction empowers lecturers to observe real-time student learning, analyze common Python misconceptions, and manage classroom competitions:
+      
+      .dashboard-features-grid
+        .dash-feat
+          h4 📋 Session Creation
+          p Create a game session, display the 6-character room code, and organize students into teams.
+        .dash-feat
+          h4 📈 Real-Time Analytics
+          p Track accuracy percentage, answer speeds, and score progressions as students answer live questions.
+        .dash-feat
+          h4 🧠 Hardest Question Breakdown
+          p Automatically surfaces the questions and topics students struggled with most for post-game debriefs.
+        .dash-feat
+          h4 🏅 Team Leaderboard &amp; Top Performers
+          p View top student contributors and team point distribution.
+
+      if currentUser && currentUser.role === "lecturer"
+        .dash-action-box
+          a.btn.btn-teal(href="/lecturer") 🚀 Go to Your Lecturer Dashboard
+      else
+        p.hint Are you an instructor? #[a(href="/register-lecturer") Sign up for a Lecturer Account] with an invite code to host games.
+
+block scripts
+

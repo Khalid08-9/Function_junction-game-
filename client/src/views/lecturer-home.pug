@@ -18,7 +18,9 @@ block content
               strong.code= item.session_code
               span.hint #{item.player_count} players, #{item.team_count} teams
             span.badge(class="badge-" + item.status)= item.status
-            a.btn.btn-small(href="/sessions/" + item.session_id) Open
+            .actions(style="display: flex; gap: 6px;")
+              a.btn.btn-small(href="/sessions/" + item.session_id) Open
+              a.btn.btn-small.btn-teal(href="/lecturer/sessions/" + item.session_id + "/dashboard") Dashboard
 
 block scripts
   script(src="/js/lecturer-home.js")

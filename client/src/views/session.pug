@@ -9,14 +9,18 @@ block content
       span.hint #{totalPlayers} players joined
 
     if isOwner
+      .owner-actions(style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;")
+        if session.status === "waiting"
+          button.btn(type="button", data-action="start", disabled=(totalPlayers === 0)) Start game
+        else if session.status === "active"
+          button.btn.btn-pink(type="button", data-action="finish") Finish game
+        a.btn.btn-teal(href="/lecturer/sessions/" + session.session_id + "/dashboard") 📊 View Dashboard
       if session.status === "waiting"
-        button.btn(type="button", data-action="start", disabled=(totalPlayers === 0)) Start game
         p.hint Students can join with the code until you start.
       else if session.status === "active"
-        button.btn.btn-pink(type="button", data-action="finish") Finish game
-        p.hint The game room page is the next step we will build.
+        p.hint Game is active! Click View Dashboard to monitor live questions and scores.
       else
-        p.hint This game has finished.
+        p.hint This game has finished. Review stats on your Dashboard.
     else
       if session.status === "waiting"
         p.hint Waiting for the lecturer to start the game. This page updates by itself.

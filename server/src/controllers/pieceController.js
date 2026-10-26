@@ -1,6 +1,8 @@
 const pool = require("../config/database");
 const { canViewSession } = require("../utils/sessionAccess");
 const pieceService = require("../services/pieceService");
+const cardService = require("../services/cardService");
+const turnService = require("../services/turnService");
 
 // GET /api/game/sessions/:sessionId/pieces
 async function getPieces(req, res) {
@@ -25,16 +27,27 @@ async function getPieces(req, res) {
 }
 
 // POST /api/game/sessions/:sessionId/pieces/move
+// Executes a marble action (enter, move, swap, or discard) and automatically advances turn
 async function movePiece(req, res) {
     const sessionId = Number(req.params.sessionId);
     const userId = req.session.user.user_id;
-    const { piece_id: pieceId, action, spaces = 0, target_piece_id: targetPieceId } = req.body;
+    const {
+        piece_id: pieceId,
+        action,
+        spaces = 0,
+        target_piece_id: targetPieceId,
+        card_id: cardId,
+        card_name: cardName
+    } = req.body;
 
     if (!Number.isInteger(sessionId) || sessionId <= 0) {
         return res.status(400).json({ message: "Invalid session ID." });
     }
-    if (!pieceId || !["move", "enter", "swap"].includes(action)) {
-        return res.status(400).json({ message: "piece_id and valid action are required." });
+    if (!["move", "enter", "swap", "discard"].includes(action)) {
+        return res.status(400).json({ message: "Valid action is required." });
+    }
+    if (action !== "discard" && !pieceId) {
+        return res.status(400).json({ message: "piece_id is required." });
     }
 
     let connection;
@@ -59,45 +72,71 @@ async function movePiece(req, res) {
             return res.status(403).json({ message: "You are not a member of this session." });
         }
 
-        const { team_id: teamId, status, current_team_id: currentTeamId } = members[0];
+        const { team_id: teamId, status } = members[0];
 
         if (status !== "active") {
             await connection.rollback();
             return res.status(409).json({ message: "This session is not active." });
         }
 
-        if (currentTeamId !== teamId) {
+        // Verify that it is specifically THIS player's turn (players cannot play on other players' turns!)
+        const [[roundInfo]] = await connection.execute(
+            `SELECT MAX(round_number) AS round_number FROM round_turns WHERE session_id = ?`,
+            [sessionId]
+        );
+        const roundNumber = roundInfo ? roundInfo.round_number : 1;
+
+        const [waiting] = await connection.execute(
+            `SELECT rt.user_id, u.full_name
+             FROM round_turns rt
+             JOIN users u ON u.user_id = rt.user_id
+             WHERE rt.session_id = ? AND rt.round_number = ? AND rt.played_at IS NULL
+             ORDER BY rt.turn_order`,
+            [sessionId, roundNumber]
+        );
+
+        if (waiting.length === 0 || waiting[0].user_id !== userId) {
             await connection.rollback();
-            return res.status(403).json({ message: "It is not your team's turn." });
+            return res.status(403).json({
+                message: `It is not your turn to play! Waiting for ${waiting[0] ? waiting[0].full_name : "another player"}.`
+            });
         }
 
-        let moveResult;
-        let captured = [];
+        let moveResult = { captured: [] };
+        let actionDesc = "";
 
         if (action === "enter") {
-            const cardName = req.body.card_name || "";
-            moveResult = await pieceService.enterPiece(connection, sessionId, teamId, pieceId, cardName);
-            captured = moveResult.captured || [];
+            moveResult = await pieceService.enterPiece(connection, sessionId, teamId, pieceId, cardName || "");
+            actionDesc = `${waiting[0].full_name} moved a marble onto the board.`;
         } else if (action === "swap") {
             if (!targetPieceId) {
                 await connection.rollback();
                 return res.status(400).json({ message: "target_piece_id is required for swap." });
             }
             moveResult = await pieceService.swapPieces(connection, sessionId, teamId, pieceId, targetPieceId);
+            actionDesc = `${waiting[0].full_name} swapped marbles with an opponent.`;
         } else if (action === "move") {
-            const isKing = Number(spaces) === 13;
-            const isJoker = Boolean(req.body.is_joker);
-            moveResult = await pieceService.movePiece(connection, sessionId, teamId, pieceId, Number(spaces), isKing, isJoker);
-            captured = moveResult.captured || [];
+            moveResult = await pieceService.movePiece(connection, sessionId, teamId, pieceId, Number(spaces), cardName || "");
+            actionDesc = `${waiting[0].full_name} moved a marble ${spaces} space(s).`;
+        } else if (action === "discard") {
+            actionDesc = `${waiting[0].full_name} discarded a card (no valid moves).`;
         }
 
-        // Check win condition
+        // Record the card as played in this deal (removes it from player's hand)
+        if (cardId || cardName) {
+            await cardService.recordCardPlayed(connection, sessionId, userId, cardId, cardName);
+        }
+
+        // Check win condition (all 8 pieces in Safe zone)
         const hasWon = await pieceService.checkWin(connection, sessionId, teamId);
         if (hasWon) {
             await connection.execute(
                 `UPDATE game_sessions SET status = 'finished', ended_at = NOW() WHERE session_id = ?`,
                 [sessionId]
             );
+        } else {
+            // Automatically advance turn to the next player!
+            await turnService.advanceTurn(connection, sessionId, userId, actionDesc);
         }
 
         const pieces = await pieceService.getPieces(sessionId);
@@ -106,9 +145,9 @@ async function movePiece(req, res) {
         return res.status(200).json({
             success: true,
             pieces,
-            captured,
+            captured: moveResult.captured || [],
             won: hasWon,
-            message: hasWon ? "Your team won the game!" : "Move completed."
+            message: hasWon ? "Your team won the game!" : actionDesc
         });
     } catch (error) {
         if (connection) {
@@ -124,4 +163,3 @@ async function movePiece(req, res) {
 }
 
 module.exports = { getPieces, movePiece };
-

@@ -555,6 +555,29 @@
         }
     }
 
+    // Auto-discard and pass turn
+    async function autoDiscardAndPass(reason) {
+        FJ.showMessage(gameMessage, reason, 'info');
+        logActivity(reason);
+        const firstBtn = cardButtonsBox ? cardButtonsBox.querySelector('.card-pick-btn') : null;
+        const cardId = currentCard ? currentCard.id : (firstBtn ? Number(firstBtn.dataset.cardId) : null);
+        const cardName = currentCard ? currentCard.name : (firstBtn ? firstBtn.dataset.cardName : "");
+
+        await FJ.sendJson('POST', '/api/game/sessions/' + sessionId + '/pieces/move', {
+            action: 'discard',
+            card_id: cardId,
+            card_name: cardName
+        });
+
+        currentCard = null;
+        lastResult = null;
+        moveMode = null;
+        if (centerCardImg) centerCardImg.hidden = true;
+        if (centerBrand) centerBrand.hidden = false;
+        showPanel('cards');
+        refresh();
+    }
+
     // ---------- MOVE FLOW ----------
     function startMoveFlow() {
         clearMessage();
@@ -562,23 +585,21 @@
 
         const cardName = (currentCard && currentCard.name) || (lastResult && lastResult.card_name) || '';
         const norm = cardName.trim().toLowerCase();
-        const canExit = ['ace', 'king', 'joker'].includes(norm);
+        const canExit = ['ace', 'king'].includes(norm);
 
         const myMarbles = piecesData.filter(function (p) { return p.team_id === myTeamId; });
         const hasTrackOrQueue = myMarbles.some(function (p) { return p.position_type === 'track' || p.position_type === 'queue'; });
 
-        // If all marbles are still in home base, only Ace, King, or Joker can exit!
+        // If all marbles are still in home base, only Ace or King can exit!
         if (!hasTrackOrQueue && !canExit) {
-            FJ.showMessage(gameMessage, 'All your marbles are at home! Only Ace, King, or Joker can exit a marble onto the track.', 'info');
-            showPanel('result');
+            autoDiscardAndPass('All your marbles are at home! ' + cardName + ' cannot exit from home. Card is discarded and turn passes.');
             return;
         }
 
         if (!lastResult.is_correct) {
             // Basic move: 1 forward, but CANNOT exit from home
             if (!hasTrackOrQueue) {
-                FJ.showMessage(gameMessage, 'Basic move is 1 forward, but only Ace, King, or Joker can exit from home. No move possible.', 'info');
-                showPanel('result');
+                autoDiscardAndPass('Basic move cannot exit from home base. Card is discarded and turn passes.');
                 return;
             }
             enterMoveMode('move', 1);
@@ -593,32 +614,28 @@
 
         if (norm === 'ace') {
             showMoveChoices([
-                { label: 'Enter from home base', action: 'enter', spaces: 0 },
+                { label: 'Enter marble from Home to Base', action: 'enter', spaces: 0 },
                 { label: 'Move 1 space forward', action: 'move', spaces: 1 },
                 { label: 'Move 11 spaces forward', action: 'move', spaces: 11 }
             ]);
         } else if (norm === 'king') {
-            showMoveChoices([
-                { label: 'Enter from home base', action: 'enter', spaces: 0 },
-                { label: 'Move 13 spaces forward', action: 'move', spaces: 13 }
-            ]);
-        } else if (norm === 'joker') {
-            showMoveChoices([
-                { label: 'Enter from home base', action: 'enter', spaces: 0 },
-                { label: 'Wild Move 1 space (bypass blockades)', action: 'move', spaces: 1 }
-            ]);
+            // King: ONLY moves from Home to Base
+            enterMoveMode('enter', 0);
         } else if (norm === 'jack') {
             enterSwapMode();
-        } else if (norm === '10') {
-            enterMoveMode('move', 10);
         } else if (norm === '7') {
-            enterMoveMode('move', 7);
-        } else if (norm === '5') {
-            enterMoveMode('move', 5);
+            showMoveChoices([
+                { label: 'Move 7 spaces forward', action: 'move', spaces: 7 },
+                { label: 'Split 7: Move 4 forward (Step 1)', action: 'move', spaces: 4 },
+                { label: 'Split 7: Move 3 forward (Step 1)', action: 'move', spaces: 3 }
+            ]);
         } else if (norm === '4') {
             enterMoveMode('move', -4);
+        } else if (norm === 'queen') {
+            enterMoveMode('move', 12);
         } else {
-            enterMoveMode('move', 1);
+            const spaces = Number(norm);
+            enterMoveMode('move', !isNaN(spaces) && spaces > 0 ? spaces : 1);
         }
     }
 
@@ -706,14 +723,14 @@
             }
         }
 
-        const isJoker = (currentCard && currentCard.name && currentCard.name.toLowerCase() === 'joker');
         const cardName = (currentCard && currentCard.name) || (lastResult && lastResult.card_name) || '';
+        const cardId = (currentCard && currentCard.id) || null;
         const body = {
             piece_id: moveMode.action === 'swap' ? moveMode.selectedOwn : pieceId,
             action: moveMode.action,
             spaces: moveMode.spaces || 0,
-            card_name: cardName,
-            is_joker: isJoker
+            card_id: cardId,
+            card_name: cardName
         };
 
         if (moveMode.action === 'swap') {
@@ -744,7 +761,11 @@
             FJ.playSound('wrong');
         }
 
+        currentCard = null;
+        lastResult = null;
         moveMode = null;
+        if (centerCardImg) centerCardImg.hidden = true;
+        if (centerBrand) centerBrand.hidden = false;
         showPanel('cards');
         refresh();
     }
@@ -1022,6 +1043,47 @@
         });
     }
 
+    // Check if the current player has any valid moves available
+    // Returns true if the player can make at least one move, false otherwise
+    function hasValidMoves() {
+        const myMarbles = piecesData.filter(function (p) { return p.team_id === myTeamId; });
+        
+        // Check if any marbles are on track or queue (can move with any card)
+        const hasTrackOrQueue = myMarbles.some(function (p) { 
+            return p.position_type === 'track' || p.position_type === 'queue'; 
+        });
+        
+        if (hasTrackOrQueue) {
+            // Player has marbles on the board - can make moves with any card
+            return true;
+        }
+        
+        // All marbles are at home - need Ace or King to exit
+        const cardBtns = cardButtonsBox ? cardButtonsBox.querySelectorAll('.card-pick-btn') : [];
+        for (let i = 0; i < cardBtns.length; i++) {
+            const cardName = (cardBtns[i].dataset.cardName || '').toLowerCase().trim();
+            if (cardName === 'ace' || cardName === 'king') {
+                return true; // Has an exit card
+            }
+        }
+        
+        // No marbles on track/queue and no exit cards - cannot make any valid move
+        return false;
+    }
+
+    // Auto-skip turn if player cannot make any valid move
+    async function checkAndAutoSkipTurn(isMyTurn) {
+        if (!isMyTurn) return;
+        
+        // Wait a brief moment for the UI to settle
+        await new Promise(function (resolve) { setTimeout(resolve, 600); });
+        
+        if (!hasValidMoves()) {
+            // Player has no valid moves - auto-discard and pass their turn per Jackaroo rules
+            autoDiscardAndPass('No cards in hand can exit from home. Card is discarded and turn passed automatically.');
+        }
+    }
+
     function updateTurn(state) {
         const current = state.current_player;
         const isMyTeam = !!current && current.team_id === myTeamId;
@@ -1031,8 +1093,8 @@
             roundInfo.textContent = 'Round ' + state.round_number + ' • Turn ' + state.turn_number;
         }
 
-        // Deal 5 fresh random cards when round changes
-        if (state.round_number && state.round_number !== currentHandRound) {
+        // Deal / refresh cards when round or turn changes
+        if (state.round_number !== lastRound || state.turn_number !== lastTurnNumber) {
             loadPlayerHand(state.round_number);
         }
 
@@ -1055,23 +1117,33 @@
             } else {
                 banner.textContent = current.full_name + '\'s turn (' + current.team_name + ')';
             }
-            banner.classList.toggle('mine', isMyTeam);
+            banner.classList.toggle('mine', isMe);
         }
 
-        // Enable card buttons only when it is my team's turn
+        // Enable card buttons ONLY when it is THIS player's turn! (Prevents answering on other players' turns)
         if (cardButtonsBox) {
             const cardBtns = cardButtonsBox.querySelectorAll('.card-pick-btn');
             cardBtns.forEach(function (btn) {
-                btn.disabled = !isMyTeam;
+                btn.disabled = !isMe;
             });
         }
 
+        const btnScan = $('#btn-scan-card');
+        if (btnScan) {
+            btnScan.disabled = !isMe;
+        }
+
+        const btnDiscard = $('#btn-discard-card');
+        if (btnDiscard) {
+            btnDiscard.hidden = !isMe || hasValidMoves();
+        }
+
         if (endTurnButton) {
-            endTurnButton.hidden = !isMe;
+            endTurnButton.hidden = true; // Turn ends automatically after card play
         }
 
         if (turnHint) {
-            turnHint.textContent = isMyTeam ? 'Choose a card from your hand.' : 'Waiting for your team\'s turn.';
+            turnHint.textContent = isMe ? 'Choose a card from your hand to play.' : (current ? 'Waiting for ' + current.full_name + ' to play.' : 'Waiting for turn...');
         }
 
         if (orderList) {
@@ -1098,13 +1170,18 @@
         if (lastTurnNumber !== null && state.turn_number !== lastTurnNumber) {
             if (state.round_number !== lastRound) {
                 FJ.playSound('round');
-            } else if (isMyTeam) {
+            } else if (isMe) {
                 FJ.playSound('turn');
             }
         }
 
         lastTurnNumber = state.turn_number;
         lastRound = state.round_number;
+        
+        // Auto-skip turn if player has no valid moves (per Jackaroo rules)
+        if (isMe) {
+            checkAndAutoSkipTurn(true);
+        }
     }
 
     function showFinished(teams) {
@@ -1236,11 +1313,14 @@
 
     if (skipMoveBtn) {
         skipMoveBtn.addEventListener('click', function () {
-            clearMessage();
-            if (centerCardImg) centerCardImg.hidden = true;
-            if (centerBrand) centerBrand.hidden = false;
-            showPanel('cards');
-            refresh();
+            autoDiscardAndPass('Move skipped. Card discarded and turn passed.');
+        });
+    }
+
+    const btnDiscardCard = $('#btn-discard-card');
+    if (btnDiscardCard) {
+        btnDiscardCard.addEventListener('click', function () {
+            autoDiscardAndPass('Card discarded and turn passed.');
         });
     }
 

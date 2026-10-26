@@ -6,6 +6,7 @@ const SEAT_ENTRY = { 0: 0, 1: 39, 2: 26, 3: 13 };
 const SEAT_COLOURS = ["red", "blue", "green", "yellow"];
 const PIECES_PER_SEAT = 4;
 const QUEUE_SIZE = 4;
+const WINNING_PIECES_COUNT = 8;
 
 // Determine seat (0..3) for a given piece and team index
 // Team 1 (index 0) gets Seat 0 (Red) and Seat 2 (Green)
@@ -88,13 +89,43 @@ async function getPieces(sessionId) {
     });
 }
 
-// Enter a piece from home onto the track at the seat's entry space
-// Validates that only Ace, King, or Joker can exit from home
+// Identifies all protected track positions:
+// 1. A playing piece on its own Base
+// 2. In the case of two consecutive playing pieces, the front piece is considered the "Base"
+// Protected pieces cannot be bypassed, killed, or swapped.
+function getProtectedPositions(allTrackPieces, teams) {
+    const protectedIndices = new Set();
+    const trackOccupancy = new Map();
+
+    for (const p of allTrackPieces) {
+        trackOccupancy.set(p.position_index, p);
+        const teamIdx = teams.findIndex(t => t.team_id === p.team_id);
+        const seat = getSeatForPiece(p, teamIdx >= 0 ? teamIdx : 0);
+        // Piece on its own Base entry
+        if (p.position_index === SEAT_ENTRY[seat]) {
+            protectedIndices.add(p.position_index);
+        }
+    }
+
+    // Check for two consecutive pieces (front piece is protected)
+    for (const p of allTrackPieces) {
+        const behindPos = (p.position_index - 1 + TRACK_SIZE) % TRACK_SIZE;
+        if (trackOccupancy.has(behindPos)) {
+            // There is a piece immediately behind this one, so this front piece is protected!
+            protectedIndices.add(p.position_index);
+        }
+    }
+
+    return protectedIndices;
+}
+
+// Enter a piece from home onto the track at the seat's entry base
+// Validates that ONLY Ace or King can exit from home
 async function enterPiece(connection, sessionId, teamId, pieceId, cardName = "") {
     if (cardName) {
         const norm = String(cardName).trim().toLowerCase();
-        if (!["ace", "king", "joker"].includes(norm)) {
-            throw new Error("Only Ace, King, or Joker can exit a marble from the home base!");
+        if (!["ace", "king"].includes(norm)) {
+            throw new Error("Only Ace or King can exit a marble from the home base!");
         }
     }
 
@@ -114,7 +145,7 @@ async function enterPiece(connection, sessionId, teamId, pieceId, cardName = "")
     const seatIndex = getSeatForPiece(piece, teamIndex);
     const entrySpace = SEAT_ENTRY[seatIndex];
 
-    // Check if an opponent piece is sitting at the entry space
+    // Check occupants at the entry base
     const [occupants] = await connection.execute(
         `SELECT gp.*, t.team_id AS occ_team_id
          FROM game_pieces gp
@@ -126,18 +157,19 @@ async function enterPiece(connection, sessionId, teamId, pieceId, cardName = "")
 
     const captured = [];
     for (const occ of occupants) {
-        if (occ.team_id !== teamId) {
-            // Check if occupant is on their own safe base entry
-            const occTeamIndex = await getTeamBoardIndex(connection, sessionId, occ.team_id);
-            const occSeat = getSeatForPiece(occ, occTeamIndex);
-            if (SEAT_ENTRY[occSeat] !== entrySpace) {
-                await connection.execute(
-                    `UPDATE game_pieces SET position_type = 'home', position_index = 0 WHERE piece_id = ?`,
-                    [occ.piece_id]
-                );
-                captured.push(occ.piece_id);
-            }
+        // If occupant is on its own base, it cannot be killed
+        const occTeamIndex = await getTeamBoardIndex(connection, sessionId, occ.team_id);
+        const occSeat = getSeatForPiece(occ, occTeamIndex);
+        if (SEAT_ENTRY[occSeat] === entrySpace && occ.piece_id !== pieceId) {
+            throw new Error("Your entry base is already occupied by a protected marble.");
         }
+
+        // Return occupant to home
+        await connection.execute(
+            `UPDATE game_pieces SET position_type = 'home', position_index = 0 WHERE piece_id = ?`,
+            [occ.piece_id]
+        );
+        captured.push(occ.piece_id);
     }
 
     await connection.execute(
@@ -148,8 +180,13 @@ async function enterPiece(connection, sessionId, teamId, pieceId, cardName = "")
     return { success: true, captured, entrySpace, seatIndex };
 }
 
-// Move a piece by a number of spaces (forward or backward) with Base Entry Blockade support
-async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing = false, isJoker = false) {
+// Move a piece by a number of spaces (forward or backward)
+async function movePiece(connection, sessionId, teamId, pieceId, spaces, cardName = "") {
+    const norm = String(cardName || "").trim().toLowerCase();
+    if (norm === "king") {
+        throw new Error("King can only be used to exit a marble from Home to Base!");
+    }
+
     const [[piece]] = await connection.execute(
         `SELECT * FROM game_pieces WHERE piece_id = ? AND session_id = ? AND team_id = ? FOR UPDATE`,
         [pieceId, sessionId, teamId]
@@ -159,11 +196,15 @@ async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing 
         throw new Error("Piece not found.");
     }
     if (piece.position_type !== "track" && piece.position_type !== "queue") {
-        throw new Error("Piece must be on the track or queue to move.");
+        throw new Error("Piece must be on the track or safe zone to move.");
     }
 
-    const teamIndex = await getTeamBoardIndex(connection, sessionId, teamId);
-    const seatIndex = getSeatForPiece(piece, teamIndex);
+    const [teams] = await connection.execute(
+        `SELECT team_id FROM teams WHERE session_id = ? ORDER BY team_id`,
+        [sessionId]
+    );
+    const teamIndex = teams.findIndex((t) => t.team_id === teamId);
+    const seatIndex = getSeatForPiece(piece, teamIndex >= 0 ? teamIndex : 0);
     const entrySpace = SEAT_ENTRY[seatIndex];
     const preEntrySpace = (entrySpace - 1 + TRACK_SIZE) % TRACK_SIZE;
 
@@ -172,67 +213,68 @@ async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing 
     const captured = [];
 
     if (piece.position_type === "queue") {
-        // Moving inside queue
+        // Moving inside Safe zone (queue slots 1..4)
         const targetSlot = piece.position_index + spaces;
         if (targetSlot < 1 || targetSlot > QUEUE_SIZE) {
-            throw new Error("Invalid move inside queue.");
+            throw new Error("Invalid move inside Safe zone: cannot move past slot 4.");
         }
         newIndex = targetSlot;
     } else if (spaces < 0) {
-        // Backward move (e.g. Card 4)
+        // Backward move (Card 4: -4 spaces)
         newIndex = (piece.position_index + spaces + TRACK_SIZE) % TRACK_SIZE;
+
+        // Check if backward move tries to land on a protected Base/consecutive piece
+        const [allTrack] = await connection.execute(
+            `SELECT gp.* FROM game_pieces gp WHERE gp.session_id = ? AND gp.position_type = 'track'`,
+            [sessionId]
+        );
+        const protectedPos = getProtectedPositions(allTrack, teams);
+        if (protectedPos.has(newIndex)) {
+            throw new Error("Cannot land on a protected Base spot.");
+        }
     } else {
         // Forward move
-        // Check for Base Entry Blockades:
-        // "when the ball stope in the places that I put arror the player whostoping canot move until put joker or wating for blue to move"
-        if (!isJoker) {
-            const [allPieces] = await connection.execute(
-                `SELECT gp.*, t.team_id AS p_team_id
-                 FROM game_pieces gp
-                 JOIN teams t ON t.team_id = gp.team_id
-                 WHERE gp.session_id = ? AND gp.position_type = 'track'`,
-                [sessionId]
-            );
+        // Check for protected spots (Base or consecutive front piece) that CANNOT be bypassed or landed on
+        const [allTrack] = await connection.execute(
+            `SELECT gp.* FROM game_pieces gp WHERE gp.session_id = ? AND gp.position_type = 'track'`,
+            [sessionId]
+        );
+        const protectedPos = getProtectedPositions(allTrack, teams);
 
-            // Collect any base entry space occupied by its owning seat's marble
-            const blockedEntries = new Set();
-            for (const p of allPieces) {
-                const pTeamIdx = await getTeamBoardIndex(connection, sessionId, p.team_id);
-                const pSeat = getSeatForPiece(p, pTeamIdx);
-                const baseEntry = SEAT_ENTRY[pSeat];
-                if (p.position_index === baseEntry && p.piece_id !== pieceId) {
-                    blockedEntries.add(baseEntry);
-                }
-            }
-
-            // Check if any step in this move passes through or lands on a blocked base entry
-            for (let step = 1; step <= spaces; step++) {
-                const checkPos = (piece.position_index + step) % TRACK_SIZE;
-                if (blockedEntries.has(checkPos)) {
-                    throw new Error("Movement blocked: A marble is protecting its base entry spot. You cannot pass until a Joker is played or that marble moves.");
-                }
-            }
-        }
-
-        // Distance to pre-entry space (turning into the inward queue)
+        // Distance to pre-entry space (turning into the inward safe zone)
         const distToPreEntry = (preEntrySpace - piece.position_index + TRACK_SIZE) % TRACK_SIZE;
 
+        // Check if movement turns into Safe zone
         if (spaces > distToPreEntry && distToPreEntry >= 0) {
-            // Enters queue!
             const queueSlot = spaces - distToPreEntry;
-            if (queueSlot >= 1 && queueSlot <= QUEUE_SIZE) {
-                newType = "queue";
-                newIndex = queueSlot;
-            } else {
-                // Cannot overshoot queue
-                newIndex = (piece.position_index + spaces) % TRACK_SIZE;
+            if (queueSlot > QUEUE_SIZE) {
+                // Rule: To enter Safe zone, card value must allow entering without overshooting!
+                throw new Error("Cannot overshoot the Safe zone! Movement must fit within the 4 safe slots.");
             }
+
+            // Verify path up to pre-entry has no bypass blockades
+            for (let step = 1; step <= distToPreEntry; step++) {
+                const checkPos = (piece.position_index + step) % TRACK_SIZE;
+                if (protectedPos.has(checkPos) && checkPos !== piece.position_index) {
+                    throw new Error("Movement blocked: A piece on Base or consecutive front piece cannot be bypassed.");
+                }
+            }
+
+            newType = "queue";
+            newIndex = queueSlot;
         } else {
+            // Forward movement along perimeter track
+            for (let step = 1; step <= spaces; step++) {
+                const checkPos = (piece.position_index + step) % TRACK_SIZE;
+                if (protectedPos.has(checkPos) && checkPos !== piece.position_index) {
+                    throw new Error("Movement blocked: A piece on Base or consecutive front piece cannot be bypassed or killed.");
+                }
+            }
             newIndex = (piece.position_index + spaces) % TRACK_SIZE;
         }
     }
 
-    // Verify queue slot is not already occupied by another piece
+    // Verify target Safe zone slot is not already occupied by another piece
     if (newType === "queue") {
         const [occQueue] = await connection.execute(
             `SELECT piece_id FROM game_pieces
@@ -240,55 +282,32 @@ async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing 
             [sessionId, teamId, newIndex, pieceId]
         );
         if (occQueue.length > 0) {
-            throw new Error("Target queue space is already occupied.");
+            throw new Error("Target Safe zone slot is already occupied.");
         }
     }
 
-    // Capture logic if landing on track
+    // Capture logic when landing on track:
+    // "If a playing piece lands on another, it is returned to its Home."
     if (newType === "track") {
-        if (isKing) {
-            // King captures all pieces passed or landed on (except safe base entries)
-            const [allOccupants] = await connection.execute(
-                `SELECT gp.* FROM game_pieces gp
-                 WHERE gp.session_id = ? AND gp.position_type = 'track' AND gp.team_id != ?
-                 FOR UPDATE`,
-                [sessionId, teamId]
-            );
+        const [occupants] = await connection.execute(
+            `SELECT gp.* FROM game_pieces gp
+             WHERE gp.session_id = ? AND gp.position_type = 'track' AND gp.position_index = ? AND gp.piece_id != ?
+             FOR UPDATE`,
+            [sessionId, newIndex, pieceId]
+        );
 
-            for (const occ of allOccupants) {
-                const occBoardIndex = await getTeamBoardIndex(connection, sessionId, occ.team_id);
-                const occSeat = getSeatForPiece(occ, occBoardIndex);
-                if (occ.position_index === SEAT_ENTRY[occSeat]) continue; // safe on base
-
-                const dist = (occ.position_index - piece.position_index + TRACK_SIZE) % TRACK_SIZE;
-                if (dist > 0 && dist <= spaces) {
-                    await connection.execute(
-                        `UPDATE game_pieces SET position_type = 'home', position_index = 0 WHERE piece_id = ?`,
-                        [occ.piece_id]
-                    );
-                    captured.push(occ.piece_id);
-                }
+        for (const occ of occupants) {
+            const occBoardIndex = await getTeamBoardIndex(connection, sessionId, occ.team_id);
+            const occSeat = getSeatForPiece(occ, occBoardIndex);
+            if (occ.position_index === SEAT_ENTRY[occSeat]) {
+                throw new Error("Target spot is protected by its Base.");
             }
-        } else {
-            // Normal landing capture
-            const [occupants] = await connection.execute(
-                `SELECT gp.* FROM game_pieces gp
-                 WHERE gp.session_id = ? AND gp.position_type = 'track' AND gp.position_index = ? AND gp.team_id != ?
-                 FOR UPDATE`,
-                [sessionId, newIndex, teamId]
-            );
 
-            for (const occ of occupants) {
-                const occBoardIndex = await getTeamBoardIndex(connection, sessionId, occ.team_id);
-                const occSeat = getSeatForPiece(occ, occBoardIndex);
-                if (occ.position_index !== SEAT_ENTRY[occSeat]) {
-                    await connection.execute(
-                        `UPDATE game_pieces SET position_type = 'home', position_index = 0 WHERE piece_id = ?`,
-                        [occ.piece_id]
-                    );
-                    captured.push(occ.piece_id);
-                }
-            }
+            await connection.execute(
+                `UPDATE game_pieces SET position_type = 'home', position_index = 0 WHERE piece_id = ?`,
+                [occ.piece_id]
+            );
+            captured.push(occ.piece_id);
         }
     }
 
@@ -301,6 +320,7 @@ async function movePiece(connection, sessionId, teamId, pieceId, spaces, isKing 
 }
 
 // Swap positions of two pieces on the track (Jack)
+// Rule: "Jack: Swaps any opponent's playing piece with another, provided neither piece is in Home, Base, or Safe zones."
 async function swapPieces(connection, sessionId, teamId, pieceId, targetPieceId) {
     const [[myPiece]] = await connection.execute(
         `SELECT * FROM game_pieces WHERE piece_id = ? AND session_id = ? AND team_id = ? FOR UPDATE`,
@@ -315,23 +335,37 @@ async function swapPieces(connection, sessionId, teamId, pieceId, targetPieceId)
         throw new Error("One or both pieces not found.");
     }
     if (myPiece.position_type !== "track" || targetPiece.position_type !== "track") {
-        throw new Error("Both pieces must be on the track to swap.");
+        throw new Error("Both pieces must be on the track to swap (cannot swap pieces in Home or Safe zone).");
     }
     if (targetPiece.team_id === teamId) {
-        throw new Error("Cannot swap with your own piece.");
+        throw new Error("Jack can only swap with an opponent's piece.");
     }
 
-    // Safety checks: neither piece can be on its respective entry space
-    const myBoardIndex = await getTeamBoardIndex(connection, sessionId, teamId);
-    const mySeat = getSeatForPiece(myPiece, myBoardIndex);
-    const targetBoardIndex = await getTeamBoardIndex(connection, sessionId, targetPiece.team_id);
-    const targetSeat = getSeatForPiece(targetPiece, targetBoardIndex);
+    const [teams] = await connection.execute(
+        `SELECT team_id FROM teams WHERE session_id = ? ORDER BY team_id`,
+        [sessionId]
+    );
+    const myBoardIndex = teams.findIndex(t => t.team_id === teamId);
+    const mySeat = getSeatForPiece(myPiece, myBoardIndex >= 0 ? myBoardIndex : 0);
+    const targetBoardIndex = teams.findIndex(t => t.team_id === targetPiece.team_id);
+    const targetSeat = getSeatForPiece(targetPiece, targetBoardIndex >= 0 ? targetBoardIndex : 0);
 
+    // Rule: Neither piece can be on its respective Base
     if (myPiece.position_index === SEAT_ENTRY[mySeat]) {
-        throw new Error("Cannot swap a piece that is on its entry base.");
+        throw new Error("Cannot swap a piece that is on its entry Base.");
     }
     if (targetPiece.position_index === SEAT_ENTRY[targetSeat]) {
-        throw new Error("Cannot swap an opponent piece on its entry base.");
+        throw new Error("Cannot swap an opponent piece on its entry Base.");
+    }
+
+    // Check consecutive protected front piece
+    const [allTrack] = await connection.execute(
+        `SELECT gp.* FROM game_pieces gp WHERE gp.session_id = ? AND gp.position_type = 'track'`,
+        [sessionId]
+    );
+    const protectedPos = getProtectedPositions(allTrack, teams);
+    if (protectedPos.has(targetPiece.position_index)) {
+        throw new Error("Cannot swap this piece: it is protected as Base or consecutive front piece.");
     }
 
     // Perform swap
@@ -348,7 +382,7 @@ async function swapPieces(connection, sessionId, teamId, pieceId, targetPieceId)
     return { success: true };
 }
 
-// Win check: at least 4 pieces in the queue for the team
+// Win check: all 8 pieces in the Safe zone for the team
 async function checkWin(db, sessionId, teamId) {
     const [[result]] = await db.execute(
         `SELECT COUNT(*) AS queue_count
@@ -356,7 +390,7 @@ async function checkWin(db, sessionId, teamId) {
          WHERE session_id = ? AND team_id = ? AND position_type = 'queue'`,
         [sessionId, teamId]
     );
-    return Number(result.queue_count) >= PIECES_PER_SEAT;
+    return Number(result.queue_count) >= WINNING_PIECES_COUNT;
 }
 
 module.exports = {
@@ -365,10 +399,12 @@ module.exports = {
     SEAT_COLOURS,
     PIECES_PER_SEAT,
     QUEUE_SIZE,
+    WINNING_PIECES_COUNT,
     getSeatForPiece,
     initializePieces,
     getPieces,
     getTeamBoardIndex,
+    getProtectedPositions,
     enterPiece,
     movePiece,
     swapPieces,

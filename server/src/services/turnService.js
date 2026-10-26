@@ -3,18 +3,16 @@ const crypto = require("crypto");
 // Fisher-Yates shuffle using a secure random number
 function shuffle(items) {
     const list = [...items];
-
     for (let i = list.length - 1; i > 0; i--) {
         const j = crypto.randomInt(i + 1);
         [list[i], list[j]] = [list[j], list[i]];
     }
-
     return list;
 }
 
 // Creates round turns where teams alternate strictly:
 // Team 1 Player 1 -> Team 2 Player 1 -> Team 1 Player 2 -> Team 2 Player 2
-// Teammates play AFTER the opposing team.
+// Clockwise play around the table with opposing teammates sitting across each other.
 async function createRound(connection, sessionId, roundNumber) {
     const [players] = await connection.execute(
         `SELECT tm.user_id, tm.team_id, u.full_name
@@ -36,15 +34,20 @@ async function createRound(connection, sessionId, roundNumber) {
         const team1Players = players.filter(p => p.team_id === teams[0].team_id);
         const team2Players = players.filter(p => p.team_id === teams[1].team_id);
 
-        // Alternate starting team across rounds
-        const startWithTeam1 = (roundNumber % 2 !== 0);
-        const firstTeam = startWithTeam1 ? team1Players : team2Players;
-        const secondTeam = startWithTeam1 ? team2Players : team1Players;
-
-        const maxCount = Math.max(firstTeam.length, secondTeam.length);
+        // Seat 0 (Team 1 P1), Seat 1 (Team 2 P1), Seat 2 (Team 1 P2), Seat 3 (Team 2 P2)
+        const tableSeats = [];
+        const maxCount = Math.max(team1Players.length, team2Players.length);
         for (let i = 0; i < maxCount; i++) {
-            if (firstTeam[i]) order.push(firstTeam[i]);
-            if (secondTeam[i]) order.push(secondTeam[i]);
+            if (team1Players[i]) tableSeats.push(team1Players[i]);
+            if (team2Players[i]) tableSeats.push(team2Players[i]);
+        }
+
+        // Rotate starting player clockwise across rounds:
+        if (tableSeats.length > 0) {
+            const shift = (roundNumber - 1) % tableSeats.length;
+            order = tableSeats.slice(shift).concat(tableSeats.slice(0, shift));
+        } else {
+            order = tableSeats;
         }
     } else {
         order = players;
@@ -64,8 +67,6 @@ async function createRound(connection, sessionId, roundNumber) {
 
 const { initializePieces } = require("./pieceService");
 
-// Called when the lecturer starts the session: makes round 1 and the game state.
-// Returns the first player, or null if nobody has joined.
 async function startGame(connection, sessionId) {
     const order = await createRound(connection, sessionId, 1);
 
@@ -73,7 +74,6 @@ async function startGame(connection, sessionId) {
         return null;
     }
 
-    // Initialize pieces for all teams in the session
     const [teams] = await connection.execute(
         `SELECT team_id FROM teams WHERE session_id = ? ORDER BY team_id`,
         [sessionId]
@@ -89,4 +89,83 @@ async function startGame(connection, sessionId) {
     return order[0];
 }
 
-module.exports = { createRound, startGame };
+// Advances the turn to the next player. Called automatically after a card action.
+async function advanceTurn(connection, sessionId, userId, actionSummary = "") {
+    const [[round]] = await connection.execute(
+        `SELECT MAX(round_number) AS round_number FROM round_turns WHERE session_id = ?`,
+        [sessionId]
+    );
+    const roundNumber = round ? round.round_number : 1;
+
+    const [waiting] = await connection.execute(
+        `SELECT rt.round_turn_id, rt.user_id, u.full_name
+         FROM round_turns rt
+         JOIN users u ON u.user_id = rt.user_id
+         WHERE rt.session_id = ? AND rt.round_number = ? AND rt.played_at IS NULL
+         ORDER BY rt.turn_order`,
+        [sessionId, roundNumber]
+    );
+
+    if (waiting.length === 0) return null;
+
+    const current = waiting[0];
+    await connection.execute(
+        `UPDATE round_turns SET played_at = NOW() WHERE round_turn_id = ?`,
+        [current.round_turn_id]
+    );
+
+    let next = waiting[1];
+    let roundComplete = false;
+    let lastActionText;
+
+    if (next) {
+        lastActionText = actionSummary
+            ? `${actionSummary} ${next.full_name} plays next.`
+            : `${current.full_name} ended their turn. ${next.full_name} plays next.`;
+    } else {
+        roundComplete = true;
+        const newOrder = await createRound(connection, sessionId, roundNumber + 1);
+        next = newOrder[0];
+        lastActionText = `Round ${roundNumber} complete. Round ${roundNumber + 1} starts: ${next.full_name} plays first.`;
+    }
+
+    const [[nextTeam]] = await connection.execute(
+        `SELECT team_id FROM team_members tm
+         WHERE tm.user_id = ? AND tm.team_id IN
+               (SELECT team_id FROM teams WHERE session_id = ?)`,
+        [next.user_id, sessionId]
+    );
+
+    // Preserve metadata if present
+    const [states] = await connection.execute(
+        `SELECT last_action FROM game_state WHERE session_id = ?`,
+        [sessionId]
+    );
+    let stateMeta = { text: lastActionText, played_cards: {}, current_deal: Math.floor((roundNumber - 1) / 5) + 1 };
+    if (states[0] && states[0].last_action) {
+        try {
+            const parsed = JSON.parse(states[0].last_action);
+            if (parsed && typeof parsed === "object") {
+                stateMeta = parsed;
+                stateMeta.text = lastActionText;
+            }
+        } catch (e) {
+            stateMeta.text = lastActionText;
+        }
+    }
+
+    await connection.execute(
+        `UPDATE game_state
+         SET current_team_id = ?, turn_number = turn_number + 1, last_action = ?
+         WHERE session_id = ?`,
+        [nextTeam.team_id, JSON.stringify(stateMeta), sessionId]
+    );
+
+    return {
+        round_number: roundComplete ? roundNumber + 1 : roundNumber,
+        round_complete: roundComplete,
+        next_player: next
+    };
+}
+
+module.exports = { createRound, startGame, advanceTurn };

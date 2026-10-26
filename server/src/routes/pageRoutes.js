@@ -15,6 +15,8 @@ router.get("/", pages.showHome);
 router.get("/login", redirectIfLoggedIn, pages.showLogin);
 router.get("/register", redirectIfLoggedIn, pages.showRegister);
 router.get("/register-lecturer", redirectIfLoggedIn, pages.showRegisterLecturer);
+router.get("/how-to-play", pages.showHowToPlay);
+router.get("/leaderboard", pages.showLeaderboardPage);
 
 // Mobile QR scan question page (open to phone camera scan)
 router.get("/q/:qrToken", asyncHandler(pages.showMobileQuestion));
