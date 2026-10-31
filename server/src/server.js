@@ -15,6 +15,10 @@ app.set("views", path.join(__dirname, "../../client/src/views"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, "../../client/public")));
+// Serve the decoder locally; camera scanning does not depend on a CDN or phone.
+app.get("/vendor/html5-qrcode.min.js", (req, res) => {
+    res.sendFile(require.resolve("html5-qrcode/html5-qrcode.min.js"));
+});
 
 app.use(session({
     secret: process.env.SESSION_SECRET || "development-secret",

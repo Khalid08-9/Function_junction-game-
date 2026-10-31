@@ -142,7 +142,7 @@ test("turn deadlines and seed data (disposable database)", {
                 json(data) { this.data = data; return this; }
             };
             await handler({ params: { sessionId }, body,
-                session: mobile ? {} : { user: { user_id: current.user_id } } }, response);
+                session: { user: { user_id: current.user_id } } }, response);
             return response;
         }
         const selections = await Promise.all([request(playCard, selection), request(playCard, selection)]);
@@ -183,5 +183,77 @@ test("turn deadlines and seed data (disposable database)", {
         assert.deepEqual(moves.map(result => result.code).sort(), [200, 403]);
         assert.equal((await readState()).turn_number, turn + 1);
         assert.equal((await getPlayerHand(sessionId, current.user_id)).hand.length, 4);
+    });
+
+    await t.test("rank scans return same-screen questions and repeated questions score once on each later turn", async () => {
+        const { createSession, startSession } = require("../src/controllers/sessionController");
+        const { scanCard, playCard } = require("../src/controllers/cardController");
+        const { submitAnswer } = require("../src/controllers/gameController");
+        const { getSessionWithTeams } = require("../src/services/sessionService");
+        function response() {
+            return { code: 200, status(code) { this.code = code; return this; },
+                json(data) { this.data = data; return this; },
+                render(view, data) { this.view = view; this.data = data; return this; } };
+        }
+        const created = response();
+        await createSession({ body: { card_mode: "physical" }, session: { user: { user_id: lecturer.user_id } } }, created);
+        assert.equal(created.code, 201);
+        const id = created.data.session.session_id;
+        const waiting = await getSessionWithTeams(id);
+        assert.equal(waiting.session.card_mode, "physical");
+        for (let teamIndex = 0; teamIndex < 2; teamIndex++) {
+            for (let seat = 0; seat < 2; seat++) {
+                await connection.execute("INSERT INTO team_members (team_id, user_id, seat_number) VALUES (?, ?, ?)",
+                    [waiting.teams[teamIndex].team_id, players[teamIndex * 2 + seat], seat + 1]);
+            }
+        }
+        const started = response();
+        await startSession({ params: { sessionId: id }, session: { user: { user_id: lecturer.user_id } } }, started);
+        assert.equal(started.code, 200);
+        assert.equal((await getSessionWithTeams(id)).session.card_mode, "physical");
+        // Rank 2 has one question, so a later scan necessarily repeats it.
+        const [[card]] = await connection.execute("SELECT card_id, qr_token FROM cards WHERE card_name = '2' LIMIT 1");
+        const user = { user_id: players[0], role: "student" };
+        const [[before]] = await connection.execute("SELECT last_action FROM game_state WHERE session_id = ?", [id]);
+        assert.deepEqual(JSON.parse(before.last_action).played_cards, {});
+        const digital = response();
+        await playCard({ params: { sessionId: id }, session: { user },
+            body: { card_id: 1, card_key: "1-hearts", turn_number: 1 } }, digital);
+        assert.equal(digital.code, 409);
+        const selected = response();
+        await scanCard({ params: { sessionId: id }, session: { user },
+            body: { qr_token: card.qr_token, turn_number: 1 } }, selected);
+        assert.equal(selected.code, 200);
+        assert.deepEqual(selected.data.hand, []);
+        assert.equal(selected.data.remaining_count, 4);
+        const question = selected.data.active_card.question_data.question;
+        assert.equal(question.options.length, 4);
+        assert.ok(question.options.every(option => !("is_correct" in option)));
+        const [[correct]] = await connection.execute("SELECT option_id FROM question_options WHERE question_id = ? AND is_correct = 1", [question.question_id]);
+        const answer = { session_id: id, question_id: question.question_id,
+            selected_option_id: correct.option_id, response_seconds: 1, turn_number: 1 };
+        const first = response();
+        await submitAnswer({ body: answer, session: { user } }, first);
+        assert.equal(first.code, 201);
+        assert.equal(first.data.points_awarded, 5);
+        const duplicate = response();
+        await submitAnswer({ body: answer, session: { user } }, duplicate);
+        assert.equal(duplicate.code, 409);
+        await connection.beginTransaction();
+        for (let i = 0; i < 7; i++) await advanceTurn(connection, id, null);
+        await connection.commit();
+        const later = response();
+        await scanCard({ params: { sessionId: id }, session: { user },
+            body: { qr_token: card.qr_token, turn_number: 8 } }, later);
+        assert.equal(later.code, 200);
+        assert.equal(later.data.active_card.question_data.question.question_id, question.question_id);
+        assert.equal(later.data.remaining_count, 3);
+        const second = response();
+        await submitAnswer({ body: { ...answer, turn_number: 8 }, session: { user } }, second);
+        assert.equal(second.code, 201);
+        assert.equal(second.data.points_awarded, 5);
+        assert.equal(second.data.team_score, 10);
+        const [[count]] = await connection.execute("SELECT COUNT(*) AS count FROM attempts WHERE session_id = ? AND question_id = ?", [id, question.question_id]);
+        assert.equal(count.count, 2);
     });
 });

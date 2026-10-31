@@ -2,11 +2,11 @@ const express = require("express");
 const router = express.Router();
 
 const { requireLogin, requireRole } = require("../middleware/authMiddleware");
-const { submitAnswer, getLeaderboard, getCardQr, getLatestAttempt, submitMobileAnswer, getHand } = require("../controllers/gameController");
+const { submitAnswer, getLeaderboard, getLatestAttempt, submitMobileAnswer, getHand } = require("../controllers/gameController");
 const { getTurnState, endTurn } = require("../controllers/turnController");
 const { getSummary } = require("../controllers/dashboardController");
 const { getPieces, movePiece } = require("../controllers/pieceController");
-const { playCard } = require("../controllers/cardController");
+const { playCard, scanCard } = require("../controllers/cardController");
 
 // Student only
 router.post("/answers", requireLogin, requireRole("student"), submitAnswer);
@@ -14,12 +14,10 @@ router.post("/answers", requireLogin, requireRole("student"), submitAnswer);
 // Hand of 5 random cards per round
 router.get("/sessions/:sessionId/hand", requireLogin, getHand);
 router.post("/sessions/:sessionId/cards/select", requireLogin, requireRole("student"), playCard);
+router.post("/sessions/:sessionId/cards/scan", requireLogin, requireRole("student"), scanCard);
 
-// Mobile answer (called from scanned phone)
-router.post("/mobile-answer", submitMobileAnswer);
-
-// Generate QR code for a card to be scanned by phone
-router.get("/card-qr/:cardId", getCardQr);
+// Legacy authenticated answer endpoint; the website camera uses /answers.
+router.post("/mobile-answer", requireLogin, requireRole("student"), submitMobileAnswer);
 
 // Polling for latest submitted answer (used while QR is shown)
 router.get("/sessions/:sessionId/latest-attempt", getLatestAttempt);

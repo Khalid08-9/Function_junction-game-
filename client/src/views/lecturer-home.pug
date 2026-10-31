@@ -5,6 +5,12 @@ block content
     h1.title Your sessions
     p.subtitle Create a session, then share its code with your students.
     p#form-message.message(role="alert", hidden)
+    .field
+      label(for="card-mode") Playing cards
+      select#card-mode(name="card_mode")
+        option(value="digital") Digital cards — select cards and answer on screen
+        option(value="physical") Physical cards — scan printed QR labels using this website’s camera
+    p.hint In both modes the web app controls the board, marbles, questions, scores and 60-second turns.
     button#create-session.btn(type="button") Create new session
 
   section.card

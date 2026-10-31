@@ -1,4 +1,5 @@
 const pool = require("../config/database");
+const { parseGameStateMeta } = require("./cardService");
 
 async function getLecturerSessions(lecturerId) {
     const [rows] = await pool.execute(
@@ -40,8 +41,10 @@ async function getStudentSessions(userId) {
 // so the API controller removes it before answering.
 async function getSessionWithTeams(sessionId) {
     const [sessions] = await pool.execute(
-        `SELECT session_id, lecturer_id, session_code, status, started_at, ended_at
-         FROM game_sessions WHERE session_id = ?`,
+        `SELECT gs.session_id, gs.lecturer_id, gs.session_code, gs.status, gs.started_at, gs.ended_at,
+                st.last_action AS card_settings
+         FROM game_sessions gs LEFT JOIN game_state st ON st.session_id = gs.session_id
+         WHERE gs.session_id = ?`,
         [sessionId]
     );
 
@@ -85,7 +88,9 @@ async function getSessionWithTeams(sessionId) {
         }
     }
 
-    return { session: sessions[0], teams };
+    const { card_settings, ...session } = sessions[0];
+    session.card_mode = parseGameStateMeta(card_settings).card_mode === "physical" ? "physical" : "digital";
+    return { session, teams };
 }
 
 module.exports = { getLecturerSessions, getStudentSessions, getSessionWithTeams };

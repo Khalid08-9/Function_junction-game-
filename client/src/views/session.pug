@@ -4,6 +4,7 @@ block content
   section.card#session-page(data-session-id=session.session_id, data-status=session.status, data-signature=session.status + ":" + totalPlayers, data-game-url=(isOwner ? null : "/sessions/" + session.session_id + "/game"))
     p.label Session code
     p.code-box= session.session_code
+    p.label= session.card_mode === 'physical' ? 'Physical cards · scan printed QR labels' : 'Digital cards · play on screen'
     p
       span.badge(class="badge-" + session.status)= session.status
       span.hint #{totalPlayers} players joined

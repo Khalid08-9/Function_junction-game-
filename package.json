@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --test server/test/*.test.js"
+    "test": "node --test server/test/*.test.js",
+    "generate:physical-qr": "node scripts/generate-physical-qr-codes.js"
   },
   "keywords": [],
   "author": "",
@@ -14,9 +15,11 @@
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
+    "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.3",
     "mysql": "^2.18.1",
     "mysql2": "^3.24.5",
-    "pug": "^3.0.4"
+    "pug": "^3.0.4",
+    "qrcode": "^1.5.4"
   }
 }

@@ -14,6 +14,7 @@
     const myTeamId = Number(room.dataset.myTeamId);
     const myUserId = Number(room.dataset.myUserId);
     const questionSeconds = Number(room.dataset.questionSeconds) || 30;
+    const physicalMode = room.dataset.cardMode === 'physical';
     const POLL_MS = 3000;
 
     // ---------- BOARD GEOMETRY (15x15 grid, indices 0..14) ----------
@@ -151,19 +152,12 @@
     const turnHint = $('#turn-hint');
     const orderList = $('#order-list');
     const cardButtonsBox = $('#card-buttons');
+    const scanButton = $('#btn-scan-card');
+    const cameraStatus = $('#camera-status');
 
     const centerCardSlot = $('#center-card-slot');
     const centerCardImg = $('#center-card-img');
     const centerBrand = $('#center-brand');
-
-    const panelCardQr = $('#panel-card-qr');
-    const qrCardImg = $('#qr-card-img');
-    const qrCardName = $('#qr-card-name');
-    const qrCardEffect = $('#qr-card-effect');
-    const qrCodeImg = $('#qr-code-img');
-    const qrStatusText = $('#qr-status-text');
-    const btnAnswerDesktop = $('#btn-answer-desktop');
-    const btnCancelQr = $('#btn-cancel-qr');
 
     const moveChoicesBox = $('#move-choices');
     const moveActionText = $('#move-action-text');
@@ -196,7 +190,7 @@
 
     const panels = {
         cards: $('#panel-cards'),
-        cardQr: $('#panel-card-qr'),
+        scanner: $('#panel-scanner'),
         moveChoice: $('#panel-move-choice'),
         selectMarble: $('#panel-select-marble'),
         question: $('#panel-question'),
@@ -211,10 +205,8 @@
     let question = null;
     let timerId = null;
     let pollId = null;
-    let qrPollId = null;
     let finished = false;
     let currentCard = null;
-    let pendingQuestionData = null;
     let lastResult = null;
     let moveMode = null;
     let teamBoardMap = {};
@@ -227,15 +219,66 @@
     let submittingMove = false;
     let handRequestId = 0;
     let handLoadedTurn = null;
+    let shownPhysicalResult = null;
+    let cameraScanner = null;
+    let openingCamera = false;
+
+    function stopPhysicalCamera() {
+        if (cameraScanner) cameraScanner.stop();
+    }
+
+    async function openPhysicalCamera() {
+        if (!physicalMode || !isMyCurrentTurn || selectingCard || selectedCardState || openingCamera) return;
+        const scanningTurn = lastTurnNumber;
+        showPanel('scanner');
+        openingCamera = true;
+        try {
+            if (cameraScanner) await cameraScanner.stop();
+            if (!isMyCurrentTurn || lastTurnNumber !== scanningTurn || selectedCardState) return;
+            cameraScanner = window.FJCardScanner.create('card-camera',
+                async function (token) { await onPhysicalCardScanned(token, scanningTurn); },
+                function (message) { if (cameraStatus) cameraStatus.textContent = message; });
+            await cameraScanner.start();
+        } finally {
+            openingCamera = false;
+        }
+    }
+
+    async function onPhysicalCardScanned(token, scanningTurn) {
+        if (!physicalMode || !isMyCurrentTurn || lastTurnNumber !== scanningTurn || selectingCard) return;
+        selectingCard = true;
+        handRequestId++;
+        try {
+            const result = await FJ.sendJson('POST', '/api/game/sessions/' + sessionId + '/cards/scan', {
+                qr_token: token, turn_number: scanningTurn
+            });
+            if (!isMyCurrentTurn || lastTurnNumber !== scanningTurn) return;
+            if (!result.ok) {
+                if (cameraStatus) cameraStatus.textContent = (result.data && result.data.message) || 'Could not play this card. Retry scanning.';
+                return;
+            }
+            selectedCardState = result.data.active_card;
+            currentCard = { id: selectedCardState.card_id, name: selectedCardState.card_name, key: selectedCardState.card_key };
+            renderPlayerHand(result.data.hand);
+            if (centerCardImg) { centerCardImg.src = selectedCardState.image; centerCardImg.hidden = false; }
+            if (centerBrand) centerBrand.hidden = true;
+            if (selectedCardState.result) showResult(selectedCardState.result);
+            else beginQuestion(selectedCardState.question_data);
+        } catch (error) {
+            if (cameraStatus) cameraStatus.textContent = 'Could not reach the game server. Check your connection and retry.';
+        } finally {
+            selectingCard = false;
+        }
+    }
 
     function tickTurnClock() {
         const left = Math.max(0, Math.ceil((turnDeadline - Date.now()) / 1000));
         const countdown = $('#turn-countdown');
         if (countdown) countdown.textContent = 'Turn time: ' + formatTime(left);
         if (left === 0 && isMyCurrentTurn) {
+            stopPhysicalCamera();
             isMyCurrentTurn = false;
             stopTimer();
-            stopQrPolling();
             question = null;
             moveMode = null;
             clearHighlights();
@@ -260,6 +303,18 @@
                 id: selectedCardState.card_id, name: selectedCardState.card_name, key: selectedCardState.card_key
             };
             renderPlayerHand(res.data.hand);
+            if (physicalMode) {
+                const status = $('#physical-card-status');
+                if (status) status.textContent = selectedCardState
+                    ? selectedCardState.card_name + ' scanned. ' +
+                        (selectedCardState.result ? 'Answer received. Complete your move.' : 'Continue the question on this screen.')
+                    : res.data.remaining_count + ' physical cards remaining in this deal. Scan a card on your turn.';
+                const resultKey = requestedTurn + ':' + (selectedCardState && selectedCardState.card_key);
+                if (isMyCurrentTurn && selectedCardState && selectedCardState.result && shownPhysicalResult !== resultKey) {
+                    shownPhysicalResult = resultKey;
+                    showResult(selectedCardState.result);
+                }
+            }
         }
     }
 
@@ -294,7 +349,7 @@
 
             const scan = document.createElement('span');
             scan.className = 'card-scan-label';
-            scan.textContent = 'SCAN TO UNLOCK';
+            scan.textContent = 'PLAY TO ANSWER';
 
             btn.append(img, name, effect, scan);
             cardButtonsBox.appendChild(btn);
@@ -304,10 +359,13 @@
             const resume = document.createElement('button');
             resume.type = 'button';
             resume.className = 'btn';
-            resume.textContent = 'Continue selected ' + selected.card_name + ' (' + selected.suit + ')';
+            resume.textContent = 'Continue selected ' + selected.card_name + (selected.suit ? ' (' + selected.suit + ')' : '');
             resume.disabled = !isMyCurrentTurn || selectingCard;
             resume.addEventListener('click', function () {
-                onCardSelected(selected.card_id, selected.card_name, selected.card_key);
+                if (!physicalMode) onCardSelected(selected.card_id, selected.card_name, selected.card_key);
+                else if (selected.result) showResult(selected.result);
+                else if (selected.question_data) beginQuestion(selected.question_data);
+                else FJ.showMessage(gameMessage, 'Close this turn and scan a new rank-only label on your next turn.', 'info');
             });
             cardButtonsBox.appendChild(resume);
         }
@@ -845,7 +903,7 @@
 
     // ---------- CARD SELECTION & QR CODE FLOW ----------
     async function onCardSelected(cardId, cardName, cardKey) {
-        if (!isMyCurrentTurn || selectingCard) return;
+        if (physicalMode || !isMyCurrentTurn || selectingCard) return;
         const selectedTurn = lastTurnNumber;
         handRequestId++;
         clearMessage();
@@ -864,9 +922,7 @@
         selectedCardState = selection.data.active_card;
         currentCard = { id: cardId, name: cardName, key: cardKey };
         stopTimer();
-        stopQrPolling();
         question = null;
-        pendingQuestionData = null;
         renderPlayerHand(selection.data.hand);
         if (selectedCardState.result) {
             showResult(selectedCardState.result);
@@ -881,54 +937,14 @@
             if (centerBrand) centerBrand.hidden = true;
         }
 
-        // 3. Fetch QR code from server
-        const qrRes = await FJ.sendJson('GET', '/api/game/card-qr/' + cardId + '?session_id=' + sessionId + '&team_id=' + myTeamId);
+        // Digital cards open questions directly; QR labels belong to real cards only.
+        const result = await FJ.sendJson('GET', '/api/questions/by-card/' + cardId);
         if (!isMyCurrentTurn || selectedTurn !== lastTurnNumber) return;
-
-        // Preload question in case user clicks "Answer on this screen"
-        FJ.sendJson('GET', '/api/questions/by-card/' + cardId).then(function (res) {
-            if (res.ok && isMyCurrentTurn && selectedTurn === lastTurnNumber) pendingQuestionData = res.data;
-        });
-
-        if (qrRes.ok && qrRes.data) {
-            if (qrCodeImg) qrCodeImg.src = qrRes.data.qr_data_url;
-            if (qrCardName) qrCardName.textContent = qrRes.data.card_name;
-            if (qrCardEffect) qrCardEffect.textContent = qrRes.data.card_effect;
-            if (qrCardImg && cardImg) qrCardImg.src = cardImg.src;
-
-            showPanel('cardQr');
-            startQrPolling();
-        } else {
-            // Fallback to desktop question if QR fails
-            const result = await FJ.sendJson('GET', '/api/questions/by-card/' + cardId);
-            if (result.ok) {
-                beginQuestion(result.data);
-            }
+        if (result.ok) beginQuestion(result.data);
+        else {
+            FJ.showMessage(gameMessage, (result.data && result.data.message) || 'Could not load the question.', 'error');
+            showPanel('cards');
         }
-    }
-
-    function stopQrPolling() {
-        if (qrPollId !== null) {
-            clearInterval(qrPollId);
-            qrPollId = null;
-        }
-    }
-
-    function startQrPolling() {
-        stopQrPolling();
-        const expectedKey = currentCard && currentCard.key;
-        const expectedTurn = lastTurnNumber;
-
-        qrPollId = setInterval(async function () {
-            const res = await FJ.sendJson('GET', '/api/game/sessions/' + sessionId + '/hand');
-            if (!isMyCurrentTurn || lastTurnNumber !== expectedTurn || !currentCard || currentCard.key !== expectedKey) return;
-            const active = res.ok && res.data && res.data.active_card;
-            if (active && active.card_key === expectedKey && active.result) {
-                selectedCardState = active;
-                stopQrPolling();
-                showResult(active.result);
-            }
-        }, 1200);
     }
 
     // ---------- QUESTION & TIMER (DESKTOP) ----------
@@ -968,8 +984,8 @@
 
     function beginQuestion(data) {
         if (!isMyCurrentTurn || Date.now() >= turnDeadline) return;
+        stopPhysicalCamera();
         stopTimer();
-        stopQrPolling();
         const text = String(data.question.question_text || '');
         const parts = text.split('\n\n');
 
@@ -1055,6 +1071,7 @@
 
     // ---------- RESULT DISPLAY ----------
     function showResult(data) {
+        if (physicalMode && currentCard) shownPhysicalResult = lastTurnNumber + ':' + currentCard.key;
         lastResult = data;
         const timedOut = data.timed_out === true;
 
@@ -1152,7 +1169,7 @@
 
     // Auto-skip turn if player cannot make any valid move
     async function checkAndAutoSkipTurn(isMyTurn) {
-        if (!isMyTurn || selectedCardState || selectingCard || submittingMove) return;
+        if (physicalMode || !isMyTurn || selectedCardState || selectingCard || submittingMove) return;
         const checkedTurn = lastTurnNumber;
         
         // Wait a brief moment for the UI to settle
@@ -1175,12 +1192,12 @@
         tickTurnClock();
 
         if (lastTurnNumber !== null && state.turn_number !== lastTurnNumber) {
+            stopPhysicalCamera();
             stopTimer();
-            stopQrPolling();
             question = null;
             currentCard = null;
             selectedCardState = null;
-            pendingQuestionData = null;
+            shownPhysicalResult = null;
             lastResult = null;
             moveMode = null;
             clearHighlights();
@@ -1194,7 +1211,7 @@
         }
 
         // Deal / refresh cards when round or turn changes
-        if (state.round_number !== lastRound || state.turn_number !== lastTurnNumber) {
+        if (physicalMode || state.round_number !== lastRound || state.turn_number !== lastTurnNumber) {
             loadPlayerHand(state.round_number, state.turn_number);
         }
 
@@ -1228,18 +1245,14 @@
             });
         }
 
-        const btnScan = $('#btn-scan-card');
-        if (btnScan) {
-            btnScan.disabled = !isMe;
-        }
-
         const btnDiscard = $('#btn-discard-card');
+        if (scanButton) scanButton.disabled = !isMe || !!selectedCardState || selectingCard;
         if (btnDiscard) {
-            btnDiscard.hidden = !isMe || hasValidMoves();
+            btnDiscard.hidden = !isMe || (physicalMode ? !selectedCardState : hasValidMoves());
         }
 
         if (turnHint) {
-            turnHint.textContent = isMe ? 'Choose a card from your hand to play.' : (current ? 'Waiting for ' + current.full_name + ' to play.' : 'Waiting for turn...');
+            turnHint.textContent = isMe ? (physicalMode ? 'Click Scan card to scan your printed card using this device’s camera.' : 'Choose a card from your hand to play.') : (current ? 'Waiting for ' + current.full_name + ' to play.' : 'Waiting for turn...');
         }
 
         if (orderList) {
@@ -1281,10 +1294,10 @@
     }
 
     function showFinished(teams) {
+        stopPhysicalCamera();
         finished = true;
         clearInterval(pollId);
         clearInterval(turnClockId);
-        stopQrPolling();
         stopTimer();
 
         const sorted = (teams || []).slice().sort(function (a, b) {
@@ -1341,6 +1354,15 @@
     }
 
     // ---------- EVENT LISTENERS ----------
+    if (scanButton) scanButton.addEventListener('click', openPhysicalCamera);
+    const retryCamera = $('#btn-retry-camera');
+    if (retryCamera) retryCamera.addEventListener('click', openPhysicalCamera);
+    const closeCamera = $('#btn-stop-camera');
+    if (closeCamera) closeCamera.addEventListener('click', async function () {
+        showPanel('cards');
+        if (cameraScanner) await cameraScanner.stop();
+    });
+    if (physicalMode && typeof window !== 'undefined') window.addEventListener('pagehide', stopPhysicalCamera);
     if (cardButtonsBox) {
         cardButtonsBox.addEventListener('click', function (e) {
             const btn = e.target.closest('.card-pick-btn');
@@ -1349,47 +1371,6 @@
                 const cardName = btn.dataset.cardName;
                 onCardSelected(cardId, cardName, btn.dataset.cardKey);
             }
-        });
-    }
-
-    const btnScanCard = $('#btn-scan-card');
-    if (btnScanCard) {
-        btnScanCard.addEventListener('click', function () {
-            if (selectedCardState) {
-                onCardSelected(selectedCardState.card_id, selectedCardState.card_name, selectedCardState.card_key);
-                return;
-            }
-            const enabledBtn = cardButtonsBox ? cardButtonsBox.querySelector('.card-pick-btn:not(:disabled)') : null;
-            if (enabledBtn) {
-                const cardId = Number(enabledBtn.dataset.cardId);
-                const cardName = enabledBtn.dataset.cardName;
-                onCardSelected(cardId, cardName, enabledBtn.dataset.cardKey);
-            } else {
-                FJ.showMessage(gameMessage, 'Please select a card from your hand or wait for your turn to scan.', 'info');
-            }
-        });
-    }
-
-    if (btnAnswerDesktop) {
-        btnAnswerDesktop.addEventListener('click', function () {
-            stopQrPolling();
-            if (pendingQuestionData) {
-                beginQuestion(pendingQuestionData);
-            } else if (currentCard) {
-                FJ.sendJson('GET', '/api/questions/by-card/' + currentCard.id).then(function (res) {
-                    if (res.ok) beginQuestion(res.data);
-                });
-            }
-        });
-    }
-
-    if (btnCancelQr) {
-        btnCancelQr.addEventListener('click', function () {
-            stopQrPolling();
-            if (centerCardImg) centerCardImg.hidden = true;
-            if (centerBrand) centerBrand.hidden = false;
-            showPanel('cards');
-            refresh();
         });
     }
 

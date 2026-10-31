@@ -136,6 +136,7 @@ CREATE TABLE attempts (
     user_id INT UNSIGNED NOT NULL,
     question_id INT UNSIGNED NOT NULL,
     selected_option_id INT UNSIGNED NOT NULL,
+    round_turn_id INT UNSIGNED NULL,
     is_correct BOOLEAN NOT NULL,
     response_seconds INT UNSIGNED NOT NULL,
     answered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -143,8 +144,8 @@ CREATE TABLE attempts (
     CONSTRAINT uq_session_team_attempt
         UNIQUE (session_id, team_id, attempt_id),
 
-    CONSTRAINT uq_team_question
-        UNIQUE (session_id, team_id, question_id),
+    CONSTRAINT uq_round_turn_attempt
+        UNIQUE (round_turn_id),
 
     -- Ensures the team belongs to this session.
     CONSTRAINT fk_attempt_session_team
@@ -217,6 +218,9 @@ CREATE TABLE round_turns (
     CONSTRAINT fk_turn_user FOREIGN KEY (user_id) REFERENCES users(user_id),
     CONSTRAINT fk_turn_team FOREIGN KEY (team_id) REFERENCES teams(team_id)
 );
+
+ALTER TABLE attempts ADD CONSTRAINT fk_attempt_round_turn
+    FOREIGN KEY (round_turn_id) REFERENCES round_turns(round_turn_id);
 
 -- 12. Marble positions
 CREATE TABLE game_pieces (

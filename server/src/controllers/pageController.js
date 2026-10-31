@@ -1,6 +1,3 @@
-const path = require("path");
-const pool = require("../config/database");
-
 const { canViewSession } = require("../utils/sessionAccess");
 const {
     getLecturerSessions,
@@ -9,7 +6,7 @@ const {
 } = require("../services/sessionService");
 const { getSummaryData } = require("../services/dashboardService");
 const { homeFor } = require("../middleware/pageAuth");
-const { getPlayerHand, cardImage } = require("../services/cardService");
+const { getPlayerHand } = require("../services/cardService");
 
 function showNotFound(res) {
     return res.status(404).render("error", {
@@ -105,7 +102,7 @@ async function showGame(req, res) {
         team.members.some((member) => member.user_id === user.user_id)
     ) || null;
 
-    const { hand } = await getPlayerHand(session.session_id, user.user_id);
+    const hand = myTeam ? (await getPlayerHand(session.session_id, user.user_id)).hand : [];
 
     return res.render("game", {
         pageTitle: "Game room - " + session.session_code,
@@ -141,85 +138,6 @@ async function showDashboard(req, res) {
     });
 }
 
-// Mobile-friendly question answering page (opened when scanning QR code with phone camera)
-async function showMobileQuestion(req, res) {
-    const qrToken = String(req.params.qrToken || "").trim();
-    const sessionId = Number(req.query.session) || null;
-    const teamId = Number(req.query.team) || null;
-
-    if (!qrToken) {
-        return showNotFound(res);
-    }
-
-    const [rows] = await pool.execute(
-        `SELECT c.card_id, c.card_name, c.card_effect, c.difficulty,
-                q.question_id, q.topic, q.question_text
-         FROM cards c
-         JOIN questions q ON q.card_id = c.card_id
-         WHERE c.qr_token = ? AND c.is_active = 1 AND q.is_active = 1
-         ORDER BY RAND()
-         LIMIT 1`,
-        [qrToken]
-    );
-
-    if (rows.length === 0) {
-        return res.status(404).render("error", {
-            pageTitle: "Card Not Found",
-            heading: "Question Not Found",
-            text: "No active question found for this card QR code."
-        });
-    }
-
-    const item = rows[0];
-
-    const [options] = await pool.execute(
-        `SELECT option_id, option_label, option_text
-         FROM question_options
-         WHERE question_id = ?
-         ORDER BY option_label`,
-        [item.question_id]
-    );
-
-    let sessionInfo = null;
-    if (sessionId) {
-        const [[s]] = await pool.execute(
-            `SELECT gs.session_id, gs.session_code, gs.status, st.turn_number,
-                    GREATEST(0, 60 - TIMESTAMPDIFF(SECOND, st.turn_started_at, NOW())) AS turn_seconds_remaining
-             FROM game_sessions gs
-             LEFT JOIN game_state st ON st.session_id = gs.session_id
-             WHERE gs.session_id = ?`,
-            [sessionId]
-        );
-        sessionInfo = s || null;
-        if (sessionInfo && req.query.turn && Number(req.query.turn) !== sessionInfo.turn_number) {
-            return res.status(409).render("error", {
-                pageTitle: "Turn ended", heading: "This turn has ended",
-                text: "Scan the card for the current turn."
-            });
-        }
-    }
-
-    return res.render("mobile-question", {
-        pageTitle: "Answer Question - " + item.card_name,
-        card: {
-            card_id: item.card_id,
-            card_name: item.card_name,
-            card_effect: item.card_effect,
-            difficulty: item.difficulty,
-            image: cardImage(item.card_name)
-        },
-        question: {
-            question_id: item.question_id,
-            topic: item.topic,
-            question_text: item.question_text,
-            options
-        },
-        sessionId,
-        teamId,
-        session: sessionInfo
-    });
-}
-
 function showHowToPlay(req, res) {
     return res.render("how-to-play", {
         pageTitle: "How to Play",
@@ -249,7 +167,6 @@ module.exports = {
     showSession,
     showGame,
     showDashboard,
-    showMobileQuestion,
     showHowToPlay,
     showLeaderboardPage
 };

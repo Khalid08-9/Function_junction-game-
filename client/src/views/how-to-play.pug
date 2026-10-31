@@ -8,6 +8,7 @@ block content
         span.badge.badge-gold GAME GUIDE &amp; RULES
         h1.title How to Play Function Junction
         p.subtitle Master Python concepts while competing on the authentic 4-player Jackaroo board!
+        p.guide-text Function Junction is an educational phygital game: real playing cards and a digital web application work together. The board and moving marbles are digital; the app asks Python function questions, checks answers, records scores and controls turns.
         .hero-buttons-row
           if currentUser && currentUser.role === "lecturer"
             a.btn.btn-teal(href="/lecturer") 📊 Open Lecturer Dashboard
@@ -22,7 +23,7 @@ block content
         |  Game Overview &amp; Partnership
       p.guide-text
         strong Jackaroo
-        |  is a 4-player strategic partnership game played on a circular wooden track. Players form two opposing teams:
+        |  is a 4-player strategic partnership game played here on a digital board. Players form two opposing teams:
       .teams-grid-preview
         .team-preview-card.team-sun
           h3 ☀️ Team Sun (Red &amp; Green)
@@ -145,24 +146,26 @@ block content
     section.card.guide-section
       h2.section-heading
         span.step-num 5
-        |  QR Scanning &amp; Python Questions
+        |  Choose Digital or Physical Cards
+      p.guide-text The lecturer selects the card mode when creating a session. Digital mode keeps the five-card on-screen hand and opens questions directly—no QR codes. Physical mode uses real cards with rank-only QR labels; click Scan card inside the game website to use this device's camera. Questions appear on that same screen. No separate phone connection is needed.
       .qr-guide-steps
         .qr-step
           span.step-circle 1
-          h4 Select Card
-          p On your turn, pick a card from your 5-card hand.
+          h4 Deal Real Cards
+          p In physical mode, shuffle and deal 5 real cards to each player. Keep the board open and choose a card on your turn.
         .qr-step
           span.step-circle 2
-          h4 Scan with Phone
-          p Scan the on-screen QR code with your phone camera (or choose desktop answer).
+          h4 Scan on This Website
+          p Click Scan card, allow this device's camera, and hold the printed QR in front of it. Use HTTPS or localhost for camera access. The same QR is used for every card of a rank, without suits.
         .qr-step
           span.step-circle 3
           h4 Answer Python Question
           p Answer correctly to unlock the card's full power. Wrong answers give basic move (1 step).
+          p Repeated ranks and questions are allowed on later turns, earning points once per turn. Duplicate submissions within one turn are blocked.
         .qr-step
           span.step-circle 4
           h4 Automatic Turn Pass
-          p Move your marble. Your turn completes automatically and passes to the next player!
+          p Move your marble on the digital board, then discard the real card. Each turn has 60 seconds in total. After 5 rounds, shuffle and deal fresh hands.
 
     //- 6. Lecturer Dashboard Guide
     section.card.guide-section.lecturer-guide-highlight
@@ -193,4 +196,3 @@ block content
         p.hint Are you an instructor? #[a(href="/register-lecturer") Sign up for a Lecturer Account] with an invite code to host games.
 
 block scripts
-

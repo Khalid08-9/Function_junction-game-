@@ -121,9 +121,11 @@ async function getPlayerHand(sessionId, userId, db = pool) {
     return {
         round_number: roundNumber,
         deal_number: dealNumber,
+        card_mode: meta.card_mode === "physical" ? "physical" : "digital",
+        remaining_count: Math.max(0, CARDS_PER_DEAL - userPlayedKeys.size),
         active_card: meta.active_card && meta.active_card.user_id === userId &&
             meta.active_card.turn_number === states[0].turn_number ? meta.active_card : null,
-        hand: remainingHand
+        hand: meta.card_mode === "physical" ? [] : remainingHand
     };
 }
 
@@ -141,6 +143,7 @@ async function recordCardPlayed(connection, sessionId, userId, cardId, cardKey) 
         [sessionId]
     );
     const meta = parseGameStateMeta(states[0] ? states[0].last_action : "");
+    if (meta.card_mode === "physical") throw cardError("Scan a physical card before playing or discarding it.");
 
     // If deal changed, reset played_cards for the fresh deal
     if (Number(meta.current_deal) !== dealNumber) {
@@ -207,6 +210,7 @@ async function saveCardMeta(connection, sessionId, meta) {
 // Caller holds the game-state lock and has verified the current player.
 async function selectCard(connection, sessionId, userId, cardId, cardKey, turnNumber) {
     let { state, meta } = await loadCardState(connection, sessionId);
+    if (meta.card_mode === "physical") throw cardError("This game uses physical cards. Scan the printed QR label.");
     if (state.turn_number !== Number(turnNumber)) throw cardError("This turn has ended.");
     if (meta.active_card) {
         if (meta.active_card.user_id === userId && meta.active_card.card_key === cardKey &&
@@ -220,6 +224,64 @@ async function selectCard(connection, sessionId, userId, cardId, cardKey, turnNu
     return meta.active_card;
 }
 
+// Real cards are dealt by the lecturer, not by the deterministic digital deck.
+// Rank-only labels can be scanned again on later turns. The unique play key is
+// the server's turn number, not a suit or a reusable printed token.
+async function selectPhysicalCard(connection, sessionId, userId, qrToken, turnNumber) {
+    const { state, meta } = await loadCardState(connection, sessionId);
+    if (meta.card_mode !== "physical") throw cardError("This game uses digital cards. Select a card on screen.");
+    if (state.turn_number !== Number(turnNumber)) throw cardError("This turn has ended.");
+    const [[card]] = await connection.execute(
+        `SELECT card_id, card_name, card_effect, difficulty, power_level, move_spaces
+         FROM cards WHERE qr_token = ? AND is_active = 1`, [qrToken]
+    );
+    if (!card || !CARD_FACES.has(card.card_name.toLowerCase())) throw cardError("This physical card is not active.", 404);
+    const key = `${card.card_id}-physical-${state.turn_number}`;
+    if (meta.active_card) {
+        if (meta.active_card.user_id === userId && meta.active_card.card_id === card.card_id &&
+            meta.active_card.turn_number === state.turn_number) return meta.active_card;
+        throw cardError("You have already selected a card for this turn.");
+    }
+    const [[round]] = await connection.execute(
+        `SELECT MAX(round_number) AS round_number FROM round_turns WHERE session_id = ?`, [sessionId]
+    );
+    const deal = Math.floor((Number(round.round_number) - 1) / CARDS_PER_DEAL) + 1;
+    if (Number(meta.current_deal) !== deal) {
+        meta.current_deal = deal;
+        meta.played_cards = {};
+    }
+    const played = meta.played_cards[userId] || [];
+    if (played.length >= CARDS_PER_DEAL) throw cardError("You have used all five cards in this deal.");
+    meta.played_cards[userId] = [...played, key];
+    meta.active_card = { ...card, card_key: key, image: cardImage(card.card_name),
+        user_id: userId, turn_number: state.turn_number, result: null };
+    await saveCardMeta(connection, sessionId, meta);
+    return meta.active_card;
+}
+
+// Bind one question to the physical play so retries/reloads cannot reroll it.
+async function preparePhysicalQuestion(connection, sessionId, userId) {
+    const { state, meta } = await loadCardState(connection, sessionId);
+    const active = meta.active_card;
+    if (!active || active.user_id !== userId || active.turn_number !== state.turn_number) throw cardError("Scan a card on your turn first.");
+    if (active.result || active.question_data) return;
+    const [[question]] = await connection.execute(
+        `SELECT question_id, topic, question_text FROM questions
+         WHERE card_id = ? AND is_active = 1 ORDER BY RAND() LIMIT 1`, [active.card_id]
+    );
+    if (!question) throw cardError("No active question is available for this card. Ask your lecturer to add one.", 404);
+    const [options] = await connection.execute(
+        `SELECT option_id, option_label, option_text FROM question_options WHERE question_id = ? ORDER BY option_label`,
+        [question.question_id]
+    );
+    active.question_id = question.question_id;
+    active.question_data = {
+        card: { card_id: active.card_id, card_name: active.card_name, card_effect: active.card_effect },
+        question: { ...question, options }
+    };
+    await saveCardMeta(connection, sessionId, meta);
+}
+
 async function assertCardAnswerAllowed(connection, sessionId, userId, questionId, turnNumber) {
     const { state, meta } = await loadCardState(connection, sessionId);
     if (turnNumber !== undefined && state.turn_number !== Number(turnNumber)) throw cardError("This turn has ended.");
@@ -228,6 +290,7 @@ async function assertCardAnswerAllowed(connection, sessionId, userId, questionId
         throw cardError("Select a card from your hand before answering.");
     }
     if (active.result) throw cardError("You have already answered for this turn.");
+    if (active.question_id && active.question_id !== Number(questionId)) throw cardError("Answer the question shown for this turn.");
     const [[question]] = await connection.execute(
         `SELECT card_id FROM questions WHERE question_id = ? AND is_active = 1`, [questionId]
     );
@@ -281,11 +344,14 @@ function dealHand(allCards, sessionId, roundNumber, userId, count = 5) {
 module.exports = {
     CARD_FACES,
     CARDS_PER_DEAL,
+    SUITS,
     cardImage,
     dealHand,
     getPlayerHand,
     recordCardPlayed,
     selectCard,
+    selectPhysicalCard,
+    preparePhysicalQuestion,
     saveCardAnswer,
     assertCardAnswerAllowed,
     validateCardMove,

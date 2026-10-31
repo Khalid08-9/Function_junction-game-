@@ -11,6 +11,8 @@ block content
         img.card-img-small(src=card.image, alt=card.card_name, width="64", height="90")
         .mobile-card-details
           h2.mobile-card-title= card.card_name
+          if card.suit
+            p.hint= card.suit
           p.mobile-card-effect= card.card_effect
           span.role-tag Difficulty: #{card.difficulty || 'Normal'}
 
@@ -48,6 +50,7 @@ block content
         p#mobile-result-text.subtitle
         p#mobile-result-action.result-action
         p.hint 🎯 Your answer has been registered on the main board! Watch your ball move around the track!
+        a.btn(href='/sessions/' + sessionId + '/game') Return to board to move or discard
 
 block scripts
   script.

@@ -5,7 +5,9 @@
     button.addEventListener("click", async function () {
         button.disabled = true;
 
-        const result = await FJ.sendJson("POST", "/api/sessions");
+        const result = await FJ.sendJson("POST", "/api/sessions", {
+            card_mode: document.querySelector("#card-mode").value
+        });
 
         if (result.ok) {
             FJ.goTo("/sessions/" + result.data.session.session_id);

@@ -12,7 +12,7 @@ function fakeGame() {
         .map((name, index) => ({ card_id: index + 1, card_name: name }));
     game.execute = async (sql, params) => {
         if (sql.includes("MAX(round_number)")) return [[{ round_number: game.round }]];
-        if (sql.includes("FROM cards")) return [definitions];
+        if (sql.includes("FROM cards")) return [sql.includes("qr_token = ?") ? [definitions[0]] : definitions];
         if (sql.includes("FROM team_members")) return [[{ user_id: 7, team_id: 10 }]];
         if (sql.includes("FROM questions")) return [[{ card_id: game.questionCardId }]];
         if (sql.includes("UPDATE game_state")) {
@@ -130,4 +130,37 @@ test("discard consumes the exact card even if no question was opened", async () 
         action: "discard", turn_number: 1, card_id: selected.card_id, card_key: selected.card_key
     });
     assert.equal((await cards.getPlayerHand(42, 7, game)).hand.length, 4);
+});
+
+test("physical mode accepts real dealt cards without a virtual hand and keeps the single-use rules", async () => {
+    const game = fakeGame();
+    game.meta.card_mode = "physical";
+    const hand = await cards.getPlayerHand(42, 7, game);
+    assert.deepEqual(hand.hand, []);
+    assert.equal(hand.remaining_count, 5);
+    await assert.rejects(cards.selectCard(game, 42, 7, 1, "1-hearts", 1), /physical cards/);
+    const selected = await cards.selectPhysicalCard(game, 42, 7, "token", 1);
+    assert.equal(selected.card_key, "1-physical-1");
+    assert.equal((await cards.getPlayerHand(42, 7, game)).remaining_count, 4);
+    await cards.selectPhysicalCard(game, 42, 7, "token", 1);
+    assert.equal((await cards.getPlayerHand(42, 7, game)).remaining_count, 4);
+    game.questionCardId = 1;
+    await cards.saveCardAnswer(game, 42, 7, 123, { is_correct: true });
+    await assert.rejects(cards.saveCardAnswer(game, 42, 7, 123, {}), /already answered/);
+    delete game.meta.active_card;
+    game.turn++;
+    const repeated = await cards.selectPhysicalCard(game, 42, 7, "token", 2);
+    assert.equal(repeated.card_key, "1-physical-2");
+    assert.equal((await cards.getPlayerHand(42, 7, game)).remaining_count, 3);
+    await assert.rejects(cards.selectPhysicalCard(game, 42, 7, "token", 1), /turn has ended/);
+    delete game.meta.active_card;
+    game.turn++;
+    game.round = 6;
+    await cards.selectPhysicalCard(game, 42, 7, "token", 3);
+    assert.equal(game.meta.current_deal, 2);
+});
+
+test("physical scans cannot be used in a digital game", async () => {
+    const game = fakeGame();
+    await assert.rejects(cards.selectPhysicalCard(game, 42, 7, "token", 1), /digital cards/);
 });

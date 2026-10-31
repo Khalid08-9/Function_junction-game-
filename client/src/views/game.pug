@@ -5,7 +5,8 @@ block content
     data-session-id=session.session_id,
     data-my-team-id=(myTeam ? myTeam.team_id : ''),
     data-my-user-id=currentUser.user_id,
-    data-question-seconds=questionSeconds
+    data-question-seconds=questionSeconds,
+    data-card-mode=session.card_mode
   )
     //- Top Storyboard Banner (matching Image 2)
     .turn-score-banner
@@ -25,6 +26,7 @@ block content
         span.team-pill-score(data-score)= (teams[1] ? teams[1].current_score : 0)
 
     p#game-message.message(role='alert', hidden)
+    p.label= session.card_mode === 'physical' ? 'Physical-card mode · scan real cards using this website’s camera' : 'Digital-card mode · select a card to answer on screen'
 
     //- Main Two-Column Game Layout (matching Image 2)
     .game-two-col
@@ -51,7 +53,20 @@ block content
           //- 1. Card selection bar
           section#panel-cards.game-panel
             .badge-row
-              span.badge-strong-cards CARDS IN HAND
+              span.badge-strong-cards= session.card_mode === 'physical' ? 'REAL CARDS IN HAND' : 'DIGITAL CARDS IN HAND'
+            if session.card_mode === 'physical'
+              .physical-card-guide
+                h3.panel-title Scan your real playing card
+                p Shuffle and deal 5 real cards to each player. Keep the board open here.
+                ol
+                  li Click Scan card below and allow access to this device's camera.
+                  li Hold the printed QR label in front of the camera.
+                  li Answer the Python question here, on the same screen.
+                  li Move a highlighted marble, then put the real card in the discard pile.
+                button#btn-scan-card.btn.btn-action-teal(type='button', disabled) Scan card
+                p#physical-card-status.hint Waiting for a physical card scan.
+                p.hint Camera access requires HTTPS or localhost. No separate phone connection is needed. The same rank QR can be used on later turns, regardless of suit.
+                p.hint Every 5 rounds, shuffle the complete real deck and deal 5 fresh cards each. Unscanned cards are trusted to be in the player's real hand.
             
             .cards-row#card-buttons
               each card in cards
@@ -59,32 +74,21 @@ block content
                   img(src=card.image, alt=card.card_name, width='72', height='100')
                   span.card-pick-name= card.card_name
                   span.card-pick-effect= card.card_effect
-                  span.card-scan-label SCAN TO UNLOCK
+                  span.card-scan-label PLAY TO ANSWER
             
             .action-buttons-row
-              button#btn-scan-card.btn.btn-action-teal(type='button') SCAN CARD
               button#btn-discard-card.btn.btn-action-teal(type='button', hidden) DISCARD & PASS
             
             p#turn-hint.hint(aria-live='polite')
 
-          //- 2. QR Code Display: Scan to phone to answer!
-          section#panel-card-qr.game-panel(hidden)
-            .qr-panel-inner
-              .qr-card-info
-                h3.panel-title Card Played
-                img#qr-card-img.qr-card-img(src="/images/cards/card-back.svg", alt="Card", width="90", height="126")
-                h4#qr-card-name.qr-card-name Card Name
-                p#qr-card-effect.hint Card Effect
-              .qr-scan-box
-                h3.subtitle 📱 Scan with your phone!
-                .qr-image-wrapper
-                  img#qr-code-img.qr-code-img(src="", alt="QR Code to scan with phone")
-                p#qr-status-text.qr-status
-                  span.qr-pulse-dot
-                  |  Waiting for answer from phone camera...
-                .button-row
-                  button#btn-answer-desktop.btn.btn-small(type="button") 💻 Answer on this screen
-                  button#btn-cancel-qr.btn.btn-small.btn-pink(type="button") Cancel
+          if session.card_mode === 'physical'
+            section#panel-scanner.game-panel(hidden)
+              h3.panel-title Scan your card
+              #card-camera
+              p#camera-status.hint(role='status', aria-live='polite') Opening camera…
+              .button-row
+                button#btn-retry-camera.btn(type='button') Start / retry camera
+                button#btn-stop-camera.btn.btn-pink(type='button') Close camera
 
           //- 3. Move choice (for Ace / King / 10 branching actions)
           section#panel-move-choice.game-panel(hidden)
@@ -139,4 +143,7 @@ block content
               li.activity-item All marbles are in their base.
 
 block scripts
+  if session.card_mode === 'physical'
+    script(src='/vendor/html5-qrcode.min.js')
+    script(src='/js/card-scanner.js')
   script(src='/js/game.js')

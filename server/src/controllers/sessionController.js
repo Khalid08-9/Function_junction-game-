@@ -40,6 +40,10 @@ async function createDefaultTeams(connection, sessionId) {
 
 async function createSession(req, res) {
     const lecturerId = req.session.user.user_id;
+    const cardMode = (req.body && req.body.card_mode) || "digital";
+    if (!["digital", "physical"].includes(cardMode)) {
+        return res.status(400).json({ message: "Choose digital cards or physical cards." });
+    }
     let connection;
 
     try {
@@ -58,6 +62,11 @@ async function createSession(req, res) {
                 );
 
                 await createDefaultTeams(connection, result.insertId);
+                // Store settings in existing metadata, avoiding a schema migration.
+                await connection.execute(
+                    `INSERT INTO game_state (session_id, last_action) VALUES (?, ?)`,
+                    [result.insertId, JSON.stringify({ card_mode: cardMode, text: "Waiting for players.", played_cards: {}, current_deal: 1 })]
+                );
                 await connection.commit();
 
                 return res.status(201).json({
@@ -65,6 +74,7 @@ async function createSession(req, res) {
                     session: {
                         session_id: result.insertId,
                         session_code: sessionCode,
+                        card_mode: cardMode,
                         status: "waiting"
                     }
                 });

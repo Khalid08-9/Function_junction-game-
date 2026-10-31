@@ -80,10 +80,18 @@ async function startGame(connection, sessionId) {
     );
     await initializePieces(connection, sessionId, teams);
 
+    const [settings] = await connection.execute(
+        `SELECT last_action FROM game_state WHERE session_id = ?`, [sessionId]
+    );
+    const { parseGameStateMeta } = require("./cardService");
+    const meta = parseGameStateMeta(settings[0] ? settings[0].last_action : "");
+    meta.text = `Round 1 started. ${order[0].full_name} plays first.`;
     await connection.execute(
         `INSERT INTO game_state (session_id, current_team_id, turn_number, last_action)
-         VALUES (?, ?, 1, ?)`,
-        [sessionId, order[0].team_id, `Round 1 started. ${order[0].full_name} plays first.`]
+         VALUES (?, ?, 1, ?)
+         ON DUPLICATE KEY UPDATE current_team_id = VALUES(current_team_id),
+             turn_number = 1, last_action = VALUES(last_action), turn_started_at = NOW()`,
+        [sessionId, order[0].team_id, JSON.stringify(meta)]
     );
 
     return order[0];

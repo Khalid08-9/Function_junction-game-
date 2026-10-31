@@ -120,7 +120,10 @@ async function movePiece(req, res) {
             moveResult = await pieceService.swapPieces(connection, sessionId, teamId, pieceId, targetPieceId);
             actionDesc = `${waiting[0].full_name} swapped marbles with an opponent.`;
         } else if (action === "move") {
-            moveResult = await pieceService.movePiece(connection, sessionId, teamId, pieceId, Number(spaces), selectedCard.card_name);
+            // Wrong answers unlock only a generic 1-space move, not the rank's
+            // special rules (e.g. King's full power is Home-to-Base only).
+            const fullPowerCard = selectedCard.result && selectedCard.result.is_correct ? selectedCard.card_name : "";
+            moveResult = await pieceService.movePiece(connection, sessionId, teamId, pieceId, Number(spaces), fullPowerCard);
             actionDesc = `${waiting[0].full_name} moved a marble ${spaces} space(s).`;
         } else if (action === "discard") {
             actionDesc = `${waiting[0].full_name} discarded a card (no valid moves).`;

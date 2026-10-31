@@ -29,6 +29,16 @@ function isPositiveInteger(value) {
     return Number.isInteger(value) && value > 0;
 }
 
+function answerFailure(res, error, fallback) {
+    const migrationMissing = (error.code === "ER_BAD_FIELD_ERROR" && /round_turn_id/.test(error.sqlMessage || "")) ||
+        (error.code === "ER_DUP_ENTRY" && /uq_team_question/.test(error.sqlMessage || ""));
+    return res.status(migrationMissing ? 503 : error.status || 500).json({
+        message: migrationMissing
+            ? "Database update required: apply database/add_per_turn_attempts.sql, then restart the server."
+            : error.status ? error.message : fallback
+    });
+}
+
 /* ---------- Submit an answer (student) ---------- */
 
 async function submitAnswer(req, res) {
@@ -145,20 +155,6 @@ async function submitAnswer(req, res) {
             return res.status(200).json(result);
         }
 
-        // 3. One answer per student per question in a session
-        const [previous] = await connection.execute(
-            `SELECT attempt_id FROM attempts
-             WHERE session_id = ? AND user_id = ? AND question_id = ?`,
-            [sessionId, userId, questionId]
-        );
-
-        if (previous.length > 0) {
-            await connection.rollback();
-            return res.status(409).json({
-                message: "You already answered this question in this session."
-            });
-        }
-
         // 4. The option must belong to the question, and the question be active
         const [options] = await connection.execute(
             `SELECT o.is_correct
@@ -191,10 +187,10 @@ async function submitAnswer(req, res) {
         // 5. Save the attempt
         const [attempt] = await connection.execute(
             `INSERT INTO attempts
-                (session_id, team_id, user_id, question_id,
-                 selected_option_id, is_correct, response_seconds)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [sessionId, teamId, userId, questionId, optionId, isCorrect ? 1 : 0, seconds]
+                (session_id, team_id, user_id, question_id, round_turn_id,
+                  selected_option_id, is_correct, response_seconds)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [sessionId, teamId, userId, questionId, waiting[0].round_turn_id, optionId, isCorrect ? 1 : 0, seconds]
         );
 
         // 6. Correct answer: record the score event and update the team score
@@ -246,9 +242,7 @@ async function submitAnswer(req, res) {
 
         console.error("Submit answer failed:", error.code || error.message);
 
-        return res.status(error.status || 500).json({
-            message: error.status ? error.message : "Could not save the answer. Please try again."
-        });
+        return answerFailure(res, error, "Could not save the answer. Please try again.");
     } finally {
         if (connection) {
             connection.release();
@@ -257,57 +251,6 @@ async function submitAnswer(req, res) {
 }
 
 /* ---------- Leaderboard (owner lecturer or a member student) ---------- */
-
-/* ---------- QR Code Generation for a Card ---------- */
-const QRCode = require("qrcode");
-
-async function getCardQr(req, res) {
-    const cardId = Number(req.params.cardId);
-    const sessionId = Number(req.query.session_id);
-    const teamId = Number(req.query.team_id);
-
-    if (!isPositiveInteger(cardId)) {
-        return res.status(400).json({ message: "Invalid card ID." });
-    }
-
-    try {
-        const [[card]] = await pool.execute(
-            `SELECT card_id, card_name, card_effect, qr_token FROM cards WHERE card_id = ?`,
-            [cardId]
-        );
-
-        if (!card) {
-            return res.status(404).json({ message: "Card not found." });
-        }
-
-        const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
-        let turnNumber = "";
-        if (isPositiveInteger(sessionId)) {
-            const [[state]] = await pool.execute(
-                `SELECT turn_number FROM game_state WHERE session_id = ?`, [sessionId]
-            );
-            turnNumber = state ? state.turn_number : "";
-        }
-        const mobileUrl = `${baseUrl}/q/${card.qr_token}?session=${sessionId || ""}&team=${teamId || ""}&turn=${turnNumber}`;
-        const qrDataUrl = await QRCode.toDataURL(mobileUrl, {
-            width: 260,
-            margin: 2,
-            color: { dark: "#170d29", light: "#ffffff" }
-        });
-
-        return res.status(200).json({
-            card_id: card.card_id,
-            card_name: card.card_name,
-            card_effect: card.card_effect,
-            qr_token: card.qr_token,
-            mobile_url: mobileUrl,
-            qr_data_url: qrDataUrl
-        });
-    } catch (error) {
-        console.error("Get card QR failed:", error.message);
-        return res.status(500).json({ message: "Could not generate QR code." });
-    }
-}
 
 /* ---------- Check Latest Answer (for Desktop polling while QR is shown) ---------- */
 async function getLatestAttempt(req, res) {
@@ -367,8 +310,9 @@ async function submitMobileAnswer(req, res) {
     const optionId = Number(req.body.selected_option_id);
     const seconds = Number(req.body.response_seconds) || 10;
     const isTimedOut = req.body.timed_out === true;
-    let userId = req.session && req.session.user ? req.session.user.user_id : null;
+    const userId = req.session && req.session.user ? req.session.user.user_id : null;
     let teamId = Number(req.body.team_id);
+    if (!userId) return res.status(401).json({ message: "Sign in with your student account before answering." });
 
     if (!isPositiveInteger(sessionId) || !isPositiveInteger(questionId) || (!isTimedOut && !isPositiveInteger(optionId))) {
         return res.status(400).json({ message: "Invalid parameters." });
@@ -414,13 +358,12 @@ async function submitMobileAnswer(req, res) {
         }
 
         const activePlayer = waiting[0];
-        if (userId && activePlayer.user_id !== userId) {
+        if (activePlayer.user_id !== userId) {
             await connection.rollback();
             return res.status(403).json({
                 message: `It is not your turn! It is currently ${activePlayer.full_name}'s turn.`
             });
         }
-        userId = activePlayer.user_id;
         teamId = activePlayer.team_id;
 
         if (!userId || !teamId) {
@@ -448,9 +391,9 @@ async function submitMobileAnswer(req, res) {
 
             await connection.execute(
                 `INSERT INTO attempts
-                    (session_id, team_id, user_id, question_id, selected_option_id, is_correct, response_seconds)
-                 VALUES (?, ?, ?, ?, ?, 0, ?)`,
-                [sessionId, teamId, userId, questionId, fallbackOptionId, seconds]
+                    (session_id, team_id, user_id, question_id, round_turn_id, selected_option_id, is_correct, response_seconds)
+                 VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+                [sessionId, teamId, userId, questionId, waiting[0].round_turn_id, fallbackOptionId, seconds]
             );
 
             const [[teamScore]] = await connection.execute(
@@ -485,9 +428,9 @@ async function submitMobileAnswer(req, res) {
 
         const [attempt] = await connection.execute(
             `INSERT INTO attempts
-                (session_id, team_id, user_id, question_id, selected_option_id, is_correct, response_seconds)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [sessionId, teamId, userId, questionId, optionId, isCorrect ? 1 : 0, seconds]
+                (session_id, team_id, user_id, question_id, round_turn_id, selected_option_id, is_correct, response_seconds)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [sessionId, teamId, userId, questionId, waiting[0].round_turn_id, optionId, isCorrect ? 1 : 0, seconds]
         );
 
         if (isCorrect) {
@@ -521,7 +464,7 @@ async function submitMobileAnswer(req, res) {
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Submit mobile answer error:", error.message);
-        return res.status(error.status || 500).json({ message: error.status ? error.message : "Could not record answer." });
+        return answerFailure(res, error, "Could not record answer.");
     } finally {
         if (connection) connection.release();
     }
@@ -584,4 +527,4 @@ async function getHand(req, res) {
     }
 }
 
-module.exports = { submitAnswer, getLeaderboard, getCardQr, getLatestAttempt, submitMobileAnswer, getHand };
+module.exports = { submitAnswer, getLeaderboard, getLatestAttempt, submitMobileAnswer, getHand };
