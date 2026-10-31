@@ -75,6 +75,94 @@ async function getSummaryData(sessionId, lecturerId) {
         [sessionId]
     );
 
+    // ---- Per-student evaluation breakdown ----
+    const [studentBreakdown] = await pool.execute(
+        `SELECT u.user_id, u.full_name, t.team_name, t.team_colour,
+                COUNT(a.attempt_id) AS attempts,
+                COALESCE(SUM(a.is_correct), 0) AS correct,
+                ROUND(AVG(a.response_seconds)) AS avg_response_seconds
+         FROM users u
+         JOIN team_members tm ON tm.user_id = u.user_id
+         JOIN teams t ON t.team_id = tm.team_id
+         LEFT JOIN attempts a ON a.user_id = u.user_id AND a.session_id = ?
+         WHERE t.session_id = ?
+         GROUP BY u.user_id, u.full_name, t.team_name, t.team_colour
+         ORDER BY correct DESC, attempts DESC, u.full_name`,
+        [sessionId, sessionId]
+    ).then(([rows]) => rows.map((row) => ({
+        user_id: row.user_id,
+        full_name: row.full_name,
+        team_name: row.team_name,
+        team_colour: row.team_colour,
+        attempts: Number(row.attempts),
+        correct: Number(row.correct),
+        wrong: Number(row.attempts) - Number(row.correct),
+        accuracy: Number(row.attempts)
+            ? Math.round((Number(row.correct) * 100) / Number(row.attempts))
+            : null,
+        avg_response_seconds: row.avg_response_seconds
+            ? Math.round(Number(row.avg_response_seconds))
+            : null
+    })));
+
+    // ---- Per-question analysis (what the class struggled with) ----
+    const [questionBreakdown] = await pool.execute(
+        `SELECT q.question_id, q.topic, q.question_text,
+                c.card_name, c.card_effect,
+                COUNT(a.attempt_id) AS attempts,
+                COALESCE(SUM(a.is_correct), 0) AS correct,
+                ROUND(AVG(a.response_seconds)) AS avg_response_seconds
+         FROM questions q
+         JOIN cards c ON c.card_id = q.card_id
+         JOIN attempts a ON a.question_id = q.question_id AND a.session_id = ?
+         WHERE a.session_id = ?
+         GROUP BY q.question_id, q.topic, q.question_text, c.card_name, c.card_effect
+         ORDER BY (COALESCE(SUM(a.is_correct), 0) / COUNT(a.attempt_id)) ASC,
+                  COUNT(a.attempt_id) DESC, q.question_id`,
+        [sessionId, sessionId]
+    ).then(([rows]) => rows.map((row) => ({
+        question_id: row.question_id,
+        topic: row.topic,
+        question_text: row.question_text,
+        card_name: row.card_name,
+        card_effect: row.card_effect,
+        attempts: Number(row.attempts),
+        correct: Number(row.correct),
+        wrong: Number(row.attempts) - Number(row.correct),
+        success_percent: Number(row.attempts)
+            ? Math.round((Number(row.correct) * 100) / Number(row.attempts))
+            : null,
+        avg_response_seconds: row.avg_response_seconds
+            ? Math.round(Number(row.avg_response_seconds))
+            : null
+    })));
+
+    // ---- Full attempt history for the session ----
+    const [allAttempts] = await pool.execute(
+        `SELECT a.attempt_id, u.full_name, t.team_name, q.topic,
+                c.card_name, qo.option_label AS selected_option,
+                a.is_correct, a.response_seconds, a.answered_at
+         FROM attempts a
+         JOIN users u ON u.user_id = a.user_id
+         JOIN teams t ON t.team_id = a.team_id
+         JOIN questions q ON q.question_id = a.question_id
+         JOIN cards c ON c.card_id = q.card_id
+         LEFT JOIN question_options qo ON qo.option_id = a.selected_option_id
+         WHERE a.session_id = ?
+         ORDER BY a.answered_at DESC`,
+        [sessionId]
+    ).then(([rows]) => rows.map((row) => ({
+        attempt_id: row.attempt_id,
+        full_name: row.full_name,
+        team_name: row.team_name,
+        topic: row.topic,
+        card_name: row.card_name,
+        selected_option: row.selected_option,
+        is_correct: row.is_correct === 1,
+        response_seconds: row.response_seconds,
+        answered_at: row.answered_at
+    })));
+
     const totalAnswers = Number(answers.total);
     const correctAnswers = Number(answers.correct);
     const hasLeader = teams.length > 0 && teams[0].current_score > 0;
@@ -116,7 +204,10 @@ async function getSummaryData(sessionId, lecturerId) {
             points: row.points,
             response_seconds: row.response_seconds,
             answered_at: row.answered_at
-        }))
+        })),
+        studentBreakdown,
+        questionBreakdown,
+        allAttempts
     };
 }
 

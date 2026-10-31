@@ -183,10 +183,20 @@ async function showMobileQuestion(req, res) {
     let sessionInfo = null;
     if (sessionId) {
         const [[s]] = await pool.execute(
-            `SELECT session_id, session_code, status FROM game_sessions WHERE session_id = ?`,
+            `SELECT gs.session_id, gs.session_code, gs.status, st.turn_number,
+                    GREATEST(0, 60 - TIMESTAMPDIFF(SECOND, st.turn_started_at, NOW())) AS turn_seconds_remaining
+             FROM game_sessions gs
+             LEFT JOIN game_state st ON st.session_id = gs.session_id
+             WHERE gs.session_id = ?`,
             [sessionId]
         );
         sessionInfo = s || null;
+        if (sessionInfo && req.query.turn && Number(req.query.turn) !== sessionInfo.turn_number) {
+            return res.status(409).render("error", {
+                pageTitle: "Turn ended", heading: "This turn has ended",
+                text: "Scan the card for the current turn."
+            });
+        }
     }
 
     return res.render("mobile-question", {

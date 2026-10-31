@@ -72,37 +72,49 @@ block content
       
       .cards-rules-table
         .card-rule-row
-          .card-badge.badge-ace ACE
+          .card-badge
+            img.card-face(src="/images/cards/ace.svg", alt="ACE card", width="64", height="90")
+            span.card-face-name ACE
           .card-rule-body
             strong Exit Home to Base OR Advance 1 / 11 Spaces
             p Can move any marble from your Home Base onto the track, or advance a marble already on the track forward by 1 or 11 spaces.
-        
+
         .card-rule-row
-          .card-badge.badge-king KING
+          .card-badge
+            img.card-face(src="/images/cards/king.svg", alt="KING card", width="64", height="90")
+            span.card-face-name KING
           .card-rule-body
             strong Exit Home to Base (Only)
             p Moves any marble from your Home Base onto your Base entry spot. King is dedicated to exiting marbles onto the board!
 
         .card-rule-row
-          .card-badge.badge-jack JACK
+          .card-badge
+            img.card-face(src="/images/cards/jack.svg", alt="JACK card", width="64", height="90")
+            span.card-face-name JACK
           .card-rule-body
             strong Swap Opponent's Marble
             p Swaps one of your marbles on the track with an opponent's marble on the track. Neither marble can be in Home, Base, or Safe zones!
 
         .card-rule-row
-          .card-badge.badge-seven 7
+          .card-badge
+            img.card-face(src="/images/cards/7.svg", alt="7 card", width="64", height="90")
+            span.card-face-name 7
           .card-rule-body
             strong Split Movement Between Two Marbles
             p Move one marble 7 spaces forward, or split the 7 spaces between two of your marbles (e.g. 4+3, 5+2, 6+1).
 
         .card-rule-row
-          .card-badge.badge-four 4
+          .card-badge
+            img.card-face(src="/images/cards/4.svg", alt="4 card", width="64", height="90")
+            span.card-face-name 4
           .card-rule-body
             strong Move 4 Spaces Backward
             p Moves one of your track marbles 4 spaces backwards (-4). Perfect for tactical retreats and quick positioning!
 
         .card-rule-row
-          .card-badge.badge-regular OTHER CARDS
+          .card-badge
+            img.card-face(src="/images/cards/card-back.svg", alt="Other cards", width="64", height="90")
+            span.card-face-name OTHER CARDS
           .card-rule-body
             strong Standard Forward Movement (2, 3, 5, 6, 8, 9, 10, Queen)
             p Advances one of your marbles forward by the card's face value (Queen moves 12 spaces).

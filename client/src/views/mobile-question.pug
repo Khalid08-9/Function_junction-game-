@@ -30,6 +30,8 @@ block content
         input(type="hidden", name="session_id", value=sessionId)
         input(type="hidden", name="question_id", value=question.question_id)
         input(type="hidden", name="team_id", value=teamId)
+        input(type="hidden", name="turn_number", value=session && session.turn_number)
+        input(type="hidden", name="turn_seconds", value=session ? session.turn_seconds_remaining : 0)
         
         .options#options
           each opt in question.options
@@ -61,13 +63,15 @@ block scripts
       const resultText = document.getElementById("mobile-result-text");
       const resultAction = document.getElementById("mobile-result-action");
 
-      let secondsLeft = 30;
+      const limit = Math.min(30, Number(form.turn_seconds.value) || 0);
+      const deadline = Date.now() + limit * 1000;
+      let secondsLeft = limit;
       let timerId = null;
       let submitted = false;
 
       function updateTimer() {
         if (submitted) return;
-        secondsLeft--;
+        secondsLeft = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
         const mins = Math.floor(secondsLeft / 60);
         const secs = secondsLeft % 60;
         timerText.textContent = String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
@@ -81,6 +85,7 @@ block scripts
       }
 
       timerId = setInterval(updateTimer, 1000);
+      updateTimer();
 
       optionsBox.addEventListener("change", function() {
         submitBtn.disabled = false;
@@ -101,7 +106,8 @@ block scripts
           session_id: Number(form.session_id.value),
           question_id: Number(form.question_id.value),
           team_id: Number(form.team_id.value) || undefined,
-          response_seconds: 30 - secondsLeft,
+          turn_number: Number(form.turn_number.value),
+          response_seconds: limit - secondsLeft,
           timed_out: timedOut
         };
 
@@ -121,6 +127,13 @@ block scripts
           const data = await res.json();
           form.hidden = true;
           resultBox.hidden = false;
+
+          if (!res.ok) {
+            resultTitle.textContent = "Turn ended";
+            resultText.textContent = data.message || "This answer could not be accepted.";
+            resultAction.textContent = "Scan the card for the current turn.";
+            return;
+          }
 
           if (data.is_correct) {
             resultIcon.src = "/images/icons/correct.svg";
@@ -142,4 +155,3 @@ block scripts
         }
       }
     })();
-

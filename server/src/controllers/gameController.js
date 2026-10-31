@@ -1,5 +1,7 @@
 const pool = require("../config/database");
 const { canViewSession } = require("../utils/sessionAccess");
+const { expireTurn } = require("../services/turnService");
+const { saveCardAnswer, assertCardAnswerAllowed } = require("../services/cardService");
 
 // Points for a correct answer depend on the card's difficulty.
 // Wrong answers give 0 and never remove points.
@@ -57,6 +59,11 @@ async function submitAnswer(req, res) {
         connection = await pool.getConnection();
         await connection.beginTransaction();
 
+        if (await expireTurn(connection, sessionId)) {
+            await connection.commit();
+            return res.status(409).json({ message: "Time is up. The next player's turn has started." });
+        }
+
         // 1. Is this student in a team of this session? (row is locked, so
         //    two quick submits cannot both pass the checks below)
         const [members] = await connection.execute(
@@ -108,7 +115,9 @@ async function submitAnswer(req, res) {
             });
         }
 
-        // Handle timed out - no attempt recorded, just return basic result
+        await assertCardAnswerAllowed(connection, sessionId, userId, questionId, req.body.turn_number);
+
+        // A question timeout still consumes this turn's selected card.
         if (isTimedOut) {
             const [[cardInfo]] = await connection.execute(
                 `SELECT c.card_name, c.basic_action
@@ -121,8 +130,7 @@ async function submitAnswer(req, res) {
                 `SELECT current_score FROM teams WHERE team_id = ?`,
                 [teamId]
             );
-            await connection.commit();
-            return res.status(200).json({
+            const result = {
                 is_correct: false,
                 card_name: cardInfo ? cardInfo.card_name : "Unknown",
                 points_awarded: 0,
@@ -131,7 +139,10 @@ async function submitAnswer(req, res) {
                 correct_option: null,
                 explanation: null,
                 timed_out: true
-            });
+            };
+            await saveCardAnswer(connection, sessionId, userId, questionId, result);
+            await connection.commit();
+            return res.status(200).json(result);
         }
 
         // 3. One answer per student per question in a session
@@ -216,9 +227,7 @@ async function submitAnswer(req, res) {
             [teamId]
         );
 
-        await connection.commit();
-
-        return res.status(201).json({
+        const result = {
             is_correct: isCorrect,
             card_name: info.card_name,
             points_awarded: points,
@@ -226,7 +235,10 @@ async function submitAnswer(req, res) {
             card_action: isCorrect ? info.full_action : info.basic_action,
             correct_option: correctOption || null,
             explanation: info.explanation
-        });
+        };
+        await saveCardAnswer(connection, sessionId, userId, questionId, result);
+        await connection.commit();
+        return res.status(201).json(result);
     } catch (error) {
         if (connection) {
             await connection.rollback();
@@ -234,8 +246,8 @@ async function submitAnswer(req, res) {
 
         console.error("Submit answer failed:", error.code || error.message);
 
-        return res.status(500).json({
-            message: "Could not save the answer. Please try again."
+        return res.status(error.status || 500).json({
+            message: error.status ? error.message : "Could not save the answer. Please try again."
         });
     } finally {
         if (connection) {
@@ -268,9 +280,15 @@ async function getCardQr(req, res) {
             return res.status(404).json({ message: "Card not found." });
         }
 
-        const host = req.get("host");
-        const protocol = req.protocol;
-        const mobileUrl = `${protocol}://${host}/q/${card.qr_token}?session=${sessionId || ""}&team=${teamId || ""}`;
+        const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
+        let turnNumber = "";
+        if (isPositiveInteger(sessionId)) {
+            const [[state]] = await pool.execute(
+                `SELECT turn_number FROM game_state WHERE session_id = ?`, [sessionId]
+            );
+            turnNumber = state ? state.turn_number : "";
+        }
+        const mobileUrl = `${baseUrl}/q/${card.qr_token}?session=${sessionId || ""}&team=${teamId || ""}&turn=${turnNumber}`;
         const qrDataUrl = await QRCode.toDataURL(mobileUrl, {
             width: 260,
             margin: 2,
@@ -362,6 +380,19 @@ async function submitMobileAnswer(req, res) {
         await connection.beginTransaction();
 
         // Enforce that only the current active player can answer
+        if (await expireTurn(connection, sessionId)) {
+            await connection.commit();
+            return res.status(409).json({ message: "Time is up. The next player's turn has started." });
+        }
+        const [[state]] = await connection.execute(
+            `SELECT st.turn_number, gs.status FROM game_state st
+             JOIN game_sessions gs ON gs.session_id = st.session_id
+             WHERE st.session_id = ?`, [sessionId]
+        );
+        if (!state || state.status !== "active" || state.turn_number !== Number(req.body.turn_number)) {
+            await connection.rollback();
+            return res.status(409).json({ message: "This turn has ended. Scan the card for the current turn." });
+        }
         const [[roundInfo]] = await connection.execute(
             `SELECT MAX(round_number) AS round_number FROM round_turns WHERE session_id = ?`,
             [sessionId]
@@ -397,6 +428,8 @@ async function submitMobileAnswer(req, res) {
             return res.status(400).json({ message: "Could not identify team or player." });
         }
 
+        await assertCardAnswerAllowed(connection, sessionId, userId, questionId, req.body.turn_number);
+
         // Fetch question info
         const [[info]] = await connection.execute(
             `SELECT q.explanation, c.card_name, c.full_action, c.basic_action, c.difficulty
@@ -424,15 +457,17 @@ async function submitMobileAnswer(req, res) {
                 `SELECT current_score FROM teams WHERE team_id = ?`,
                 [teamId]
             );
-            await connection.commit();
-            return res.status(200).json({
+            const result = {
                 is_correct: false,
                 card_name: info ? info.card_name : "Unknown",
                 points_awarded: 0,
                 team_score: teamScore ? teamScore.current_score : 0,
                 card_action: info ? info.basic_action : "Basic move: advance 1 space",
                 timed_out: true
-            });
+            };
+            await saveCardAnswer(connection, sessionId, userId, questionId, result);
+            await connection.commit();
+            return res.status(200).json(result);
         }
 
         const [options] = await connection.execute(
@@ -472,20 +507,21 @@ async function submitMobileAnswer(req, res) {
             [teamId]
         );
 
-        await connection.commit();
-
-        return res.status(201).json({
+        const result = {
             is_correct: isCorrect,
             card_name: info.card_name,
             points_awarded: points,
             team_score: team.current_score,
             card_action: isCorrect ? info.full_action : info.basic_action,
             explanation: info.explanation
-        });
+        };
+        await saveCardAnswer(connection, sessionId, userId, questionId, result);
+        await connection.commit();
+        return res.status(201).json(result);
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Submit mobile answer error:", error.message);
-        return res.status(500).json({ message: "Could not record answer." });
+        return res.status(error.status || 500).json({ message: error.status ? error.message : "Could not record answer." });
     } finally {
         if (connection) connection.release();
     }
@@ -544,7 +580,7 @@ async function getHand(req, res) {
         return res.status(200).json(result);
     } catch (error) {
         console.error("Get hand error:", error.message);
-        return res.status(500).json({ message: "Could not load cards." });
+        return res.status(error.status || 500).json({ message: error.status ? error.message : "Could not load cards." });
     }
 }
 

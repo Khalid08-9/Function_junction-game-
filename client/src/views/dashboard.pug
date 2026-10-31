@@ -1,73 +1,202 @@
 extends layout
 
 block content
-  section.card(data-session-id=session.session_id)
-    h1.title Lecturer dashboard
-    p.subtitle Session #{session.session_code}
-    p
-      span.badge(class="badge-" + session.status)= session.status
-      if session.started_at
-        |  Started: #{new Date(session.started_at).toLocaleString()}
-      if session.ended_at
-        |  · Ended: #{new Date(session.ended_at).toLocaleString()}
+  - const teamColors = { red: '#e53935', blue: '#1e88e5', green: '#43a047', yellow: '#fdd835', orange: '#fb8c00', purple: '#8e24aa' }
+  - const maxScore = summary.teams.length ? Math.max(1, ...summary.teams.map(t => t.current_score)) : 1
 
-    if summary
-      .dashboard-grid
-        .stat-card
-          p.label Students
-          p.big= summary.students
-        .stat-card
-          p.label Answers
-          p.big= summary.answers
-        .stat-card
-          p.label Accuracy
-          p.big= (summary.accuracy_percent !== null ? summary.accuracy_percent + "%" : "—")
-        .stat-card
-          p.label Leading team
-          p.big= summary.leading_team ? summary.leading_team.team_name : "—"
-          if summary.is_tie
-            p.hint (tie)
+  .lecturer-dashboard(data-session-id=session.session_id)
+    //- Left Sidebar (matches Image 1)
+    aside.sidebar
+      .sidebar-brand
+        span.brand-name FUNCTION JUNCTION
+        span.brand-role LECTURER
+      nav.sidebar-nav
+        a.sidebar-item.active(data-section="overview")
+          span.icon 📊
+          span.label OVERVIEW
+        a.sidebar-item(data-section="session")
+          span.icon 🎮
+          span.label SESSION
+        a.sidebar-item(data-section="questions")
+          span.icon ❓
+          span.label QUESTIONS
+        a.sidebar-item(data-section="students")
+          span.icon 👥
+          span.label STUDENTS
+        a.sidebar-item(data-section="reports")
+          span.icon 📄
+          span.label REPORTS
+      .sidebar-footer
+        button#end-session.btn.btn-teal(type="button") END SESSION
+        p#form-message.message(role="alert", hidden)
 
-      h2.title Team scores
-      ul.list
-        each team in summary.teams
-          li.list-row
-            div
-              strong.code= team.team_name
-              span.hint Score: #{team.current_score}
-            span.badge(class="badge-" + (team.team_colour || "").toLowerCase())= (team.team_colour || "").toUpperCase()
+    //- Main content area
+    main.dashboard-main
+      //- Overview section (active by default - matches Image 1)
+      section.dashboard-section#overview-section.active(data-section="overview")
+        header.dashboard-banner
+          .banner-main
+            h1.banner-title LIVE SESSION DASHBOARD
+            p.banner-sub Python Fundamentals • Session #{session.session_code}
+          .banner-live
+            span.live-pill LIVE
+            span#live-timer(data-started-at=session.started_at || "") 00:00:00
 
-      h2.title Hardest question
-      if summary.hardest_question
-        section.card
-          p.label= summary.hardest_question.topic
-          p.subtitle #{summary.hardest_question.attempts} attempts · #{summary.hardest_question.success_percent}% correct
-      else
-        p.hint No questions attempted yet.
+        .stat-row
+          .stat-card
+            p.stat-label STUDENTS
+            p.stat-value= summary.students + " / 4"
+          .stat-card
+            p.stat-label QUESTIONS
+            p.stat-value= summary.answers
+          .stat-card
+            p.stat-label ACCURACY
+            p.stat-value= (summary.accuracy_percent !== null ? summary.accuracy_percent + "%" : "—")
+          .stat-card
+            p.stat-label LEADING TEAM
+            p.stat-value= summary.leading_team ? summary.leading_team.team_name : "—"
+            if summary.is_tie
+              p.stat-note (tie)
 
-      h2.title Top performer
-      if summary.top_performer
-        section.card
-          p.subtitle= summary.top_performer.full_name
-          p.big= summary.top_performer.correct_answers + " correct answers"
-      else
-        p.hint No top performer yet.
+        .content-grid
+          article.card.panel.team-scores
+            h2.panel-title TEAM SCORES
+            .team-bars
+              each team in summary.teams
+                - const pct = Math.round((team.current_score / maxScore) * 100)
+                - const color = teamColors[team.team_colour] || '#ffc83d'
+                .team-bar
+                  span.bar-name= team.team_name
+                  .bar-track
+                    .bar-fill(style="width: " + pct + "%; background-color: " + color)
+                  span.bar-value= team.current_score
 
-      h2.title Recent activity
-      ul.list
-        if summary.recent_activity.length === 0
-          li.list-row
-            p.hint No activity yet.
+          article.card.panel.lecturer-insight
+            h2.panel-title LECTURER INSIGHT
+            .insight-badge NEEDS ATTENTION
+            p.insight-text Question #{summary.hardest_question ? summary.hardest_question.topic : '5'} has the lowest success rate (#{summary.hardest_question ? summary.hardest_question.success_percent : 50}%). Consider reviewing list indexing after this round.
+            .top-performer
+              p.performer-title Top performer
+              p.performer-name= summary.top_performer ? summary.top_performer.full_name : "—"
+              span.performer-score= summary.top_performer ? summary.top_performer.correct_answers + " correct answers" : "—"
+
+        article.card.panel.recent-activity
+          h2.panel-title RECENT ACTIVITY
+          .activity-list
+            if summary.recent_activity.length === 0
+              p.activity-empty No activity yet.
+            else
+              each item in summary.recent_activity
+                .activity-item
+                  span.time= new Date(item.answered_at).toLocaleTimeString([], {hour12: false, hour: "2-digit", minute:"2-digit", second:"2-digit"})
+                  span.user= item.full_name
+                  span.action= (item.is_correct ? "Correct answer" : "Wrong answer")
+                  if item.is_correct
+                    span.pts +5 points
+                  else
+                    span.pts Wrong
+
+      //- Session section
+      section.dashboard-section(data-section="session")
+        h2.section-head Session Details
+        .detail-grid
+          .detail-item
+            p.label Session Code
+            p.value= session.session_code
+          .detail-item
+            p.label Status
+            span.badge(class="badge-" + session.status)= session.status
+          .detail-item
+            p.label Started At
+            p.value= session.started_at ? new Date(session.started_at).toLocaleString() : "—"
+          .detail-item
+            p.label Ended At
+            p.value= session.ended_at ? new Date(session.ended_at).toLocaleString() : "—"
+
+      //- Questions section
+      section.dashboard-section(data-section="questions")
+        h2.section-head Question Analysis
+        if summary.questionBreakdown.length === 0
+          p.empty-state No questions attempted yet.
         else
-          each item in summary.recent_activity
-            li.list-row
-              div
-                strong= item.full_name
-                span.hint #{item.team_name} · #{item.response_seconds}s
-              span(class=(item.is_correct ? "badge-active" : "badge-waiting"))= (item.is_correct ? "Correct +" + item.points : "Wrong")
+          table.eval-table
+            thead
+              tr
+                th Topic
+                th Card
+                th Attempts
+                th Correct
+                th Wrong
+                th Success %
+                th Avg Time (s)
+            tbody
+              each q in summary.questionBreakdown
+                tr
+                  td= q.topic
+                  td= q.card_name
+                  td= q.attempts
+                  td= q.correct
+                  td= q.wrong
+                  td= (q.success_percent !== null ? q.success_percent + "%" : "—")
+                  td= (q.avg_response_seconds !== null ? q.avg_response_seconds : "—")
 
-    button#end-session.btn.btn-pink(type="button") End session
-    p#form-message.message(role="alert", hidden)
+      //- Students section
+      section.dashboard-section(data-section="students")
+        h2.section-head Student Evaluation
+        if summary.studentBreakdown.length === 0
+          p.empty-state No student attempts recorded yet.
+        else
+          table.eval-table
+            thead
+              tr
+                th Student
+                th Team
+                th Attempts
+                th Correct
+                th Wrong
+                th Accuracy
+                th Avg Time (s)
+            tbody
+              each student in summary.studentBreakdown
+                tr
+                  td= student.full_name
+                  td
+                    span.badge(class="badge-" + (student.team_colour || "").toLowerCase())= (student.team_name || "—")
+                  td= student.attempts
+                  td= student.correct
+                  td= student.wrong
+                  td= (student.accuracy !== null ? student.accuracy + "%" : "—")
+                  td= (student.avg_response_seconds !== null ? student.avg_response_seconds : "—")
+
+      //- Reports section
+      section.dashboard-section(data-section="reports")
+        h2.section-head Full Game Log
+        if summary.allAttempts.length === 0
+          p.empty-state No game activity yet.
+        else
+          table.eval-table
+            thead
+              tr
+                th Time
+                th Student
+                th Team
+                th Topic
+                th Card
+                th Answer
+                th Result
+                th Time (s)
+            tbody
+              each item in summary.allAttempts
+                tr(class=(item.is_correct ? "row-correct" : "row-wrong"))
+                  td= new Date(item.answered_at).toLocaleTimeString([], {hour12: false, hour: "2-digit", minute:"2-digit", second:"2-digit"})
+                  td= item.full_name
+                  td= item.team_name
+                  td= item.topic
+                  td= item.card_name
+                  td= item.selected_option || "—"
+                  td.eval-result
+                    span(class=(item.is_correct ? "badge-active" : "badge-waiting"))= (item.is_correct ? "Correct" : "Wrong")
+                  td= item.response_seconds
 
 block scripts
   script(src="/js/dashboard.js")

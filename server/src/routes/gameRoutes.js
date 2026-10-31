@@ -6,12 +6,14 @@ const { submitAnswer, getLeaderboard, getCardQr, getLatestAttempt, submitMobileA
 const { getTurnState, endTurn } = require("../controllers/turnController");
 const { getSummary } = require("../controllers/dashboardController");
 const { getPieces, movePiece } = require("../controllers/pieceController");
+const { playCard } = require("../controllers/cardController");
 
 // Student only
 router.post("/answers", requireLogin, requireRole("student"), submitAnswer);
 
 // Hand of 5 random cards per round
 router.get("/sessions/:sessionId/hand", requireLogin, getHand);
+router.post("/sessions/:sessionId/cards/select", requireLogin, requireRole("student"), playCard);
 
 // Mobile answer (called from scanned phone)
 router.post("/mobile-answer", submitMobileAnswer);

@@ -1,6 +1,7 @@
 const pool = require("../config/database");
 const { canViewSession } = require("../utils/sessionAccess");
-const { createRound } = require("../services/turnService");
+const { advanceTurn, expireTurn } = require("../services/turnService");
+const { expireSessionTurn } = require("../services/turnTimerService");
 
 function parseSessionId(req) {
     const sessionId = Number(req.params.sessionId);
@@ -10,7 +11,9 @@ function parseSessionId(req) {
 // Reads the current game state. "db" can be the pool or a transaction connection.
 async function loadTurnState(db, sessionId) {
     const [states] = await db.execute(
-        `SELECT turn_number, last_action FROM game_state WHERE session_id = ?`,
+        `SELECT turn_number, last_action,
+                GREATEST(0, 60 - TIMESTAMPDIFF(SECOND, turn_started_at, NOW())) AS turn_seconds_remaining
+         FROM game_state WHERE session_id = ?`,
         [sessionId]
     );
 
@@ -49,6 +52,7 @@ async function loadTurnState(db, sessionId) {
         session_id: sessionId,
         round_number: round.round_number,
         turn_number: states[0].turn_number,
+        turn_seconds_remaining: states[0].turn_seconds_remaining,
         last_action: actionText,
         current_player: current && {
             user_id: current.user_id,
@@ -84,6 +88,7 @@ async function getTurnState(req, res) {
             return res.status(404).json({ message: "Session not found." });
         }
 
+        await expireSessionTurn(sessionId);
         const state = await loadTurnState(pool, sessionId);
 
         if (!state) {
@@ -119,6 +124,11 @@ async function endTurn(req, res) {
     try {
         connection = await pool.getConnection();
         await connection.beginTransaction();
+
+        if (await expireTurn(connection, sessionId)) {
+            await connection.commit();
+            return res.status(409).json({ message: "Time is up. The next player's turn has started." });
+        }
 
         // Lock the game state, so two "end turn" requests cannot clash
         const [states] = await connection.execute(
@@ -165,39 +175,7 @@ async function endTurn(req, res) {
             });
         }
 
-        await connection.execute(
-            `UPDATE round_turns SET played_at = NOW() WHERE round_turn_id = ?`,
-            [current.round_turn_id]
-        );
-
-        let next = waiting[1];
-        let roundComplete = false;
-        let lastAction;
-
-        if (next) {
-            lastAction = `${current.full_name} ended their turn. ${next.full_name} plays next.`;
-        } else {
-            // Everybody played: start a new round with a NEW random order
-            roundComplete = true;
-            const newOrder = await createRound(connection, sessionId, round.round_number + 1);
-            next = newOrder[0];
-            lastAction = `Round ${round.round_number} complete. ` +
-                `Round ${round.round_number + 1} starts: ${next.full_name} plays first.`;
-        }
-
-        const [[nextTeam]] = await connection.execute(
-            `SELECT team_id FROM team_members tm
-             WHERE tm.user_id = ? AND tm.team_id IN
-                   (SELECT team_id FROM teams WHERE session_id = ?)`,
-            [next.user_id, sessionId]
-        );
-
-        await connection.execute(
-            `UPDATE game_state
-             SET current_team_id = ?, turn_number = turn_number + 1, last_action = ?
-             WHERE session_id = ?`,
-            [nextTeam.team_id, lastAction, sessionId]
-        );
+        const { round_complete: roundComplete } = await advanceTurn(connection, sessionId, userId);
 
         const state = await loadTurnState(connection, sessionId);
 

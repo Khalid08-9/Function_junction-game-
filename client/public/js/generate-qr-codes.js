@@ -1,12 +1,4 @@
-// Makes one QR code image per active card, from the card's qr_token.
-//
-// Run it from the PROJECT ROOT (the folder with your .env):
-//     npm install qrcode
-//     node server/scripts/generate-qr-codes.js
-//
-// The images are saved in the "qr-codes" folder in the project root.
-// That folder is NOT served by the website on purpose: a QR code is the secret
-// that proves a student really holds the printed card.
+
 
 require("dotenv").config();
 

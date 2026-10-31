@@ -90,6 +90,7 @@ async function startServer() {
         await pool.query("SELECT 1");
 
         console.log("Database connected successfully");
+        require("./services/turnTimerService").startTurnTimer();
 
         app.listen(port, () => {
             console.log(`Server running at http://localhost:${port}`);

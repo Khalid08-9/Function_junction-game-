@@ -16,6 +16,7 @@ block content
       
       .banner-turn-center
         h1#turn-banner.main-turn-title Loading turn...
+        p#turn-countdown(aria-live='off') Turn time: 01:00
         p#round-info.round-sub-info Round 1
       
       .banner-team-pill.team-right(data-team-id=(teams[1] ? teams[1].team_id : ''))
@@ -63,7 +64,6 @@ block content
             .action-buttons-row
               button#btn-scan-card.btn.btn-action-teal(type='button') SCAN CARD
               button#btn-discard-card.btn.btn-action-teal(type='button', hidden) DISCARD & PASS
-              button#end-turn-button.btn.btn-action-teal(type='button', hidden) END TURN
             
             p#turn-hint.hint(aria-live='polite')
 

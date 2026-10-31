@@ -148,7 +148,6 @@
     const banner = $('#turn-banner');
     const roundInfo = $('#round-info');
     const gameMessage = $('#game-message');
-    const endTurnButton = $('#end-turn-button');
     const turnHint = $('#turn-hint');
     const orderList = $('#order-list');
     const cardButtonsBox = $('#card-buttons');
@@ -220,13 +219,46 @@
     let moveMode = null;
     let teamBoardMap = {};
     let piecesData = [];
-    let initialAttemptId = 0;
+    let turnDeadline = 0;
+    let turnClockId = null;
+    let isMyCurrentTurn = false;
+    let selectedCardState = null;
+    let selectingCard = false;
+    let submittingMove = false;
+    let handRequestId = 0;
+    let handLoadedTurn = null;
+
+    function tickTurnClock() {
+        const left = Math.max(0, Math.ceil((turnDeadline - Date.now()) / 1000));
+        const countdown = $('#turn-countdown');
+        if (countdown) countdown.textContent = 'Turn time: ' + formatTime(left);
+        if (left === 0 && isMyCurrentTurn) {
+            isMyCurrentTurn = false;
+            stopTimer();
+            stopQrPolling();
+            question = null;
+            moveMode = null;
+            clearHighlights();
+            showPanel('cards');
+            if (cardButtonsBox) {
+                cardButtonsBox.querySelectorAll('button').forEach(function (btn) { btn.disabled = true; });
+            }
+            refresh();
+        }
+    }
 
     // Load and render the 5 random cards dealt for the current round
-    async function loadPlayerHand(roundNumber) {
+    async function loadPlayerHand(roundNumber, turnNumber = lastTurnNumber) {
         currentHandRound = roundNumber;
+        const requestedTurn = turnNumber;
+        const requestId = ++handRequestId;
         const res = await FJ.sendJson('GET', '/api/game/sessions/' + sessionId + '/hand');
-        if (res.ok && res.data && Array.isArray(res.data.hand)) {
+        if (res.ok && res.data && Array.isArray(res.data.hand) && requestedTurn === lastTurnNumber && requestId === handRequestId) {
+            handLoadedTurn = requestedTurn;
+            selectedCardState = res.data.active_card || null;
+            if (selectedCardState) currentCard = {
+                id: selectedCardState.card_id, name: selectedCardState.card_name, key: selectedCardState.card_key
+            };
             renderPlayerHand(res.data.hand);
         }
     }
@@ -238,20 +270,23 @@
         handCards.forEach(function (card) {
             const btn = document.createElement('button');
             btn.type = 'button';
+            btn.disabled = !isMyCurrentTurn || !!selectedCardState || selectingCard;
             btn.className = 'card-pick-btn';
             btn.dataset.cardId = card.card_id;
             btn.dataset.cardName = card.card_name;
+            btn.dataset.cardKey = card.card_key;
             btn.dataset.handIndex = card.hand_index;
 
             const img = document.createElement('img');
             img.src = card.image || '/images/cards/card-back.svg';
-            img.alt = card.card_name;
+            img.alt = card.card_name + (card.suit ? ' of ' + card.suit : '');
             img.width = 72;
             img.height = 100;
 
             const name = document.createElement('span');
             name.className = 'card-pick-name';
-            name.textContent = card.card_name;
+            const suitSymbol = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' }[card.suit] || '';
+            name.textContent = card.card_name + (suitSymbol ? ' ' + suitSymbol : '');
 
             const effect = document.createElement('span');
             effect.className = 'card-pick-effect';
@@ -264,6 +299,18 @@
             btn.append(img, name, effect, scan);
             cardButtonsBox.appendChild(btn);
         });
+        if (selectedCardState) {
+            const selected = selectedCardState;
+            const resume = document.createElement('button');
+            resume.type = 'button';
+            resume.className = 'btn';
+            resume.textContent = 'Continue selected ' + selected.card_name + ' (' + selected.suit + ')';
+            resume.disabled = !isMyCurrentTurn || selectingCard;
+            resume.addEventListener('click', function () {
+                onCardSelected(selected.card_id, selected.card_name, selected.card_key);
+            });
+            cardButtonsBox.appendChild(resume);
+        }
     }
 
     function showPanel(name) {
@@ -557,19 +604,29 @@
 
     // Auto-discard and pass turn
     async function autoDiscardAndPass(reason) {
+        if (!isMyCurrentTurn || selectingCard || submittingMove) return;
+        submittingMove = true;
         FJ.showMessage(gameMessage, reason, 'info');
         logActivity(reason);
         const firstBtn = cardButtonsBox ? cardButtonsBox.querySelector('.card-pick-btn') : null;
         const cardId = currentCard ? currentCard.id : (firstBtn ? Number(firstBtn.dataset.cardId) : null);
         const cardName = currentCard ? currentCard.name : (firstBtn ? firstBtn.dataset.cardName : "");
 
-        await FJ.sendJson('POST', '/api/game/sessions/' + sessionId + '/pieces/move', {
+        const result = await FJ.sendJson('POST', '/api/game/sessions/' + sessionId + '/pieces/move', {
             action: 'discard',
             card_id: cardId,
-            card_name: cardName
+            card_name: cardName,
+            card_key: currentCard ? currentCard.key : (firstBtn ? firstBtn.dataset.cardKey : null),
+            turn_number: lastTurnNumber
         });
+        submittingMove = false;
+        if (!result.ok) {
+            FJ.showMessage(gameMessage, (result.data && result.data.message) || 'Could not discard the card.', 'error');
+            return;
+        }
 
         currentCard = null;
+        selectedCardState = null;
         lastResult = null;
         moveMode = null;
         if (centerCardImg) centerCardImg.hidden = true;
@@ -686,10 +743,18 @@
 
         showPanel('selectMarble');
         highlightMarbles(moveMode);
+
+        // If no marbles can be moved with this card, auto-discard so the turn can continue
+        const highlightedCount = boardEl ? boardEl.querySelectorAll('.marble.selectable').length : 0;
+        if (highlightedCount === 0) {
+            setTimeout(function () {
+                autoDiscardAndPass('No valid marble to move with this card. Card is discarded and turn passes.');
+            }, 800);
+        }
     }
 
     async function onMarbleClick(pieceId) {
-        if (!moveMode) return;
+        if (!moveMode || submittingMove || !isMyCurrentTurn) return;
 
         const piece = piecesData.find(function (p) { return p.piece_id === pieceId; });
         if (!piece) return;
@@ -730,7 +795,9 @@
             action: moveMode.action,
             spaces: moveMode.spaces || 0,
             card_id: cardId,
-            card_name: cardName
+            card_name: cardName,
+            card_key: currentCard && currentCard.key,
+            turn_number: lastTurnNumber
         };
 
         if (moveMode.action === 'swap') {
@@ -740,13 +807,16 @@
         clearHighlights();
         clearMessage();
 
+        submittingMove = true;
+        const requestedMode = moveMode;
         const result = await FJ.sendJson('POST', '/api/game/sessions/' + sessionId + '/pieces/move', body);
+        submittingMove = false;
 
         if (result.ok) {
             if (result.data && result.data.pieces) {
                 updatePieces(result.data.pieces);
             }
-            logActivity((piece.team_name || 'Team') + ' moved ' + (moveMode.action === 'enter' ? 'onto board' : moveMode.spaces + ' spaces'));
+            logActivity((piece.team_name || 'Team') + ' moved ' + (requestedMode.action === 'enter' ? 'onto board' : requestedMode.spaces + ' spaces'));
             if (result.data && result.data.won) {
                 const infoRes = await FJ.sendJson('GET', '/api/sessions/' + sessionId);
                 showFinished(infoRes.ok && infoRes.data ? infoRes.data.teams : []);
@@ -759,9 +829,12 @@
         } else {
             FJ.showMessage(gameMessage, (result.data && result.data.message) || 'Move failed', 'error');
             FJ.playSound('wrong');
+            highlightMarbles(moveMode);
+            return;
         }
 
         currentCard = null;
+        selectedCardState = null;
         lastResult = null;
         moveMode = null;
         if (centerCardImg) centerCardImg.hidden = true;
@@ -771,42 +844,50 @@
     }
 
     // ---------- CARD SELECTION & QR CODE FLOW ----------
-    async function onCardSelected(cardId, cardName) {
-        currentCard = { id: cardId, name: cardName };
+    async function onCardSelected(cardId, cardName, cardKey) {
+        if (!isMyCurrentTurn || selectingCard) return;
+        const selectedTurn = lastTurnNumber;
+        handRequestId++;
         clearMessage();
+        selectingCard = true;
+        if (cardButtonsBox) cardButtonsBox.querySelectorAll('button').forEach(function (btn) { btn.disabled = true; });
+        const selection = await FJ.sendJson('POST', '/api/game/sessions/' + sessionId + '/cards/select', {
+            card_id: cardId, card_key: cardKey, turn_number: selectedTurn
+        });
+        selectingCard = false;
+        if (!isMyCurrentTurn || selectedTurn !== lastTurnNumber) return;
+        if (!selection.ok) {
+            FJ.showMessage(gameMessage, (selection.data && selection.data.message) || 'Could not select the card.', 'error');
+            loadPlayerHand(lastRound);
+            return;
+        }
+        selectedCardState = selection.data.active_card;
+        currentCard = { id: cardId, name: cardName, key: cardKey };
+        stopTimer();
+        stopQrPolling();
+        question = null;
+        pendingQuestionData = null;
+        renderPlayerHand(selection.data.hand);
+        if (selectedCardState.result) {
+            showResult(selectedCardState.result);
+            return;
+        }
 
         // 1. Place card face in the center of the Jackaroo board (like physical game)
-        const clickedCardBtn = cardButtonsBox ? cardButtonsBox.querySelector('[data-card-id="' + cardId + '"]') : null;
-        const cardImg = clickedCardBtn ? clickedCardBtn.querySelector('img') : null;
+        const cardImg = { src: selectedCardState.image };
         if (cardImg && centerCardImg) {
             centerCardImg.src = cardImg.src;
             centerCardImg.hidden = false;
             if (centerBrand) centerBrand.hidden = true;
         }
 
-        if (clickedCardBtn) {
-            clickedCardBtn.disabled = true;
-            clickedCardBtn.style.opacity = '0.35';
-        }
-
-        // 2. Query current latest attempt to prevent triggering on old attempts
-        try {
-            const prevRes = await FJ.sendJson('GET', '/api/game/sessions/' + sessionId + '/latest-attempt?since=0');
-            if (prevRes.ok && prevRes.data && prevRes.data.attempt) {
-                initialAttemptId = prevRes.data.attempt.attempt_id;
-            } else {
-                initialAttemptId = 0;
-            }
-        } catch (e) {
-            initialAttemptId = 0;
-        }
-
         // 3. Fetch QR code from server
         const qrRes = await FJ.sendJson('GET', '/api/game/card-qr/' + cardId + '?session_id=' + sessionId + '&team_id=' + myTeamId);
+        if (!isMyCurrentTurn || selectedTurn !== lastTurnNumber) return;
 
         // Preload question in case user clicks "Answer on this screen"
         FJ.sendJson('GET', '/api/questions/by-card/' + cardId).then(function (res) {
-            if (res.ok) pendingQuestionData = res.data;
+            if (res.ok && isMyCurrentTurn && selectedTurn === lastTurnNumber) pendingQuestionData = res.data;
         });
 
         if (qrRes.ok && qrRes.data) {
@@ -835,22 +916,17 @@
 
     function startQrPolling() {
         stopQrPolling();
+        const expectedKey = currentCard && currentCard.key;
+        const expectedTurn = lastTurnNumber;
 
         qrPollId = setInterval(async function () {
-            const res = await FJ.sendJson('GET', '/api/game/sessions/' + sessionId + '/latest-attempt?since=' + initialAttemptId);
-            if (res.ok && res.data && res.data.attempt) {
-                const att = res.data.attempt;
-                initialAttemptId = att.attempt_id;
+            const res = await FJ.sendJson('GET', '/api/game/sessions/' + sessionId + '/hand');
+            if (!isMyCurrentTurn || lastTurnNumber !== expectedTurn || !currentCard || currentCard.key !== expectedKey) return;
+            const active = res.ok && res.data && res.data.active_card;
+            if (active && active.card_key === expectedKey && active.result) {
+                selectedCardState = active;
                 stopQrPolling();
-                showResult({
-                    is_correct: att.is_correct,
-                    points_awarded: att.points_awarded,
-                    team_score: att.team_score,
-                    card_action: att.card_action,
-                    card_name: att.card_name,
-                    correct_option: null,
-                    explanation: null
-                });
+                showResult(active.result);
             }
         }, 1200);
     }
@@ -891,6 +967,8 @@
     }
 
     function beginQuestion(data) {
+        if (!isMyCurrentTurn || Date.now() >= turnDeadline) return;
+        stopTimer();
         stopQrPolling();
         const text = String(data.question.question_text || '');
         const parts = text.split('\n\n');
@@ -898,7 +976,7 @@
         question = {
             id: data.question.question_id,
             startedAt: Date.now(),
-            limit: questionSeconds,
+            limit: Math.min(questionSeconds, Math.max(0, Math.floor((turnDeadline - Date.now()) / 1000))),
             lastLeft: null,
             done: false
         };
@@ -947,6 +1025,7 @@
 
         const body = {
             session_id: sessionId,
+            turn_number: lastTurnNumber,
             question_id: question.id,
             response_seconds: Math.min(
                 question.limit,
@@ -1073,12 +1152,14 @@
 
     // Auto-skip turn if player cannot make any valid move
     async function checkAndAutoSkipTurn(isMyTurn) {
-        if (!isMyTurn) return;
+        if (!isMyTurn || selectedCardState || selectingCard || submittingMove) return;
+        const checkedTurn = lastTurnNumber;
         
         // Wait a brief moment for the UI to settle
         await new Promise(function (resolve) { setTimeout(resolve, 600); });
         
-        if (!hasValidMoves()) {
+        if (isMyCurrentTurn && lastTurnNumber === checkedTurn && handLoadedTurn === checkedTurn &&
+            !selectedCardState && !selectingCard && !hasValidMoves()) {
             // Player has no valid moves - auto-discard and pass their turn per Jackaroo rules
             autoDiscardAndPass('No cards in hand can exit from home. Card is discarded and turn passed automatically.');
         }
@@ -1088,6 +1169,25 @@
         const current = state.current_player;
         const isMyTeam = !!current && current.team_id === myTeamId;
         const isMe = !!current && current.user_id === myUserId;
+        isMyCurrentTurn = isMe;
+        turnDeadline = Date.now() + Number(state.turn_seconds_remaining || 0) * 1000;
+        if (turnClockId === null) turnClockId = setInterval(tickTurnClock, 250);
+        tickTurnClock();
+
+        if (lastTurnNumber !== null && state.turn_number !== lastTurnNumber) {
+            stopTimer();
+            stopQrPolling();
+            question = null;
+            currentCard = null;
+            selectedCardState = null;
+            pendingQuestionData = null;
+            lastResult = null;
+            moveMode = null;
+            clearHighlights();
+            if (centerCardImg) centerCardImg.hidden = true;
+            if (centerBrand) centerBrand.hidden = false;
+            showPanel('cards');
+        }
 
         if (roundInfo) {
             roundInfo.textContent = 'Round ' + state.round_number + ' • Turn ' + state.turn_number;
@@ -1095,7 +1195,7 @@
 
         // Deal / refresh cards when round or turn changes
         if (state.round_number !== lastRound || state.turn_number !== lastTurnNumber) {
-            loadPlayerHand(state.round_number);
+            loadPlayerHand(state.round_number, state.turn_number);
         }
 
         const sidebarPlayer = $('#sidebar-player-name');
@@ -1124,7 +1224,7 @@
         if (cardButtonsBox) {
             const cardBtns = cardButtonsBox.querySelectorAll('.card-pick-btn');
             cardBtns.forEach(function (btn) {
-                btn.disabled = !isMe;
+                btn.disabled = !isMe || handLoadedTurn !== state.turn_number || !!selectedCardState || selectingCard;
             });
         }
 
@@ -1136,10 +1236,6 @@
         const btnDiscard = $('#btn-discard-card');
         if (btnDiscard) {
             btnDiscard.hidden = !isMe || hasValidMoves();
-        }
-
-        if (endTurnButton) {
-            endTurnButton.hidden = true; // Turn ends automatically after card play
         }
 
         if (turnHint) {
@@ -1187,6 +1283,7 @@
     function showFinished(teams) {
         finished = true;
         clearInterval(pollId);
+        clearInterval(turnClockId);
         stopQrPolling();
         stopTimer();
 
@@ -1250,7 +1347,7 @@
             if (btn && !btn.disabled) {
                 const cardId = Number(btn.dataset.cardId);
                 const cardName = btn.dataset.cardName;
-                onCardSelected(cardId, cardName);
+                onCardSelected(cardId, cardName, btn.dataset.cardKey);
             }
         });
     }
@@ -1258,11 +1355,15 @@
     const btnScanCard = $('#btn-scan-card');
     if (btnScanCard) {
         btnScanCard.addEventListener('click', function () {
+            if (selectedCardState) {
+                onCardSelected(selectedCardState.card_id, selectedCardState.card_name, selectedCardState.card_key);
+                return;
+            }
             const enabledBtn = cardButtonsBox ? cardButtonsBox.querySelector('.card-pick-btn:not(:disabled)') : null;
             if (enabledBtn) {
                 const cardId = Number(enabledBtn.dataset.cardId);
                 const cardName = enabledBtn.dataset.cardName;
-                onCardSelected(cardId, cardName);
+                onCardSelected(cardId, cardName, enabledBtn.dataset.cardKey);
             } else {
                 FJ.showMessage(gameMessage, 'Please select a card from your hand or wait for your turn to scan.', 'info');
             }
@@ -1335,31 +1436,6 @@
             clearHighlights();
             moveMode = null;
             showPanel('result');
-        });
-    }
-
-    if (endTurnButton) {
-        endTurnButton.addEventListener('click', async function () {
-            endTurnButton.disabled = true;
-            clearMessage();
-            if (centerCardImg) centerCardImg.hidden = true;
-            if (centerBrand) centerBrand.hidden = false;
-
-            const result = await FJ.sendJson('POST', '/api/game/sessions/' + sessionId + '/turn/end');
-            endTurnButton.disabled = false;
-
-            if (!result.ok) {
-                FJ.showMessage(gameMessage, (result.data && result.data.message) || 'Could not end the turn.', 'error');
-                refresh();
-                return;
-            }
-
-            if (result.data.round_complete) {
-                FJ.showMessage(gameMessage, 'Round complete! A new round starts with new turn order.', 'success');
-            }
-
-            updateTurn(result.data);
-            refresh();
         });
     }
 

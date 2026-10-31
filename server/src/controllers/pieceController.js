@@ -35,9 +35,7 @@ async function movePiece(req, res) {
         piece_id: pieceId,
         action,
         spaces = 0,
-        target_piece_id: targetPieceId,
-        card_id: cardId,
-        card_name: cardName
+        target_piece_id: targetPieceId
     } = req.body;
 
     if (!Number.isInteger(sessionId) || sessionId <= 0) {
@@ -54,6 +52,11 @@ async function movePiece(req, res) {
     try {
         connection = await pool.getConnection();
         await connection.beginTransaction();
+
+        if (await turnService.expireTurn(connection, sessionId)) {
+            await connection.commit();
+            return res.status(409).json({ message: "Time is up. The next player's turn has started." });
+        }
 
         // Check if user is in a team for this session and session is active
         const [members] = await connection.execute(
@@ -104,9 +107,10 @@ async function movePiece(req, res) {
 
         let moveResult = { captured: [] };
         let actionDesc = "";
+        const selectedCard = await cardService.validateCardMove(connection, sessionId, userId, req.body);
 
         if (action === "enter") {
-            moveResult = await pieceService.enterPiece(connection, sessionId, teamId, pieceId, cardName || "");
+            moveResult = await pieceService.enterPiece(connection, sessionId, teamId, pieceId, selectedCard.card_name);
             actionDesc = `${waiting[0].full_name} moved a marble onto the board.`;
         } else if (action === "swap") {
             if (!targetPieceId) {
@@ -116,15 +120,10 @@ async function movePiece(req, res) {
             moveResult = await pieceService.swapPieces(connection, sessionId, teamId, pieceId, targetPieceId);
             actionDesc = `${waiting[0].full_name} swapped marbles with an opponent.`;
         } else if (action === "move") {
-            moveResult = await pieceService.movePiece(connection, sessionId, teamId, pieceId, Number(spaces), cardName || "");
+            moveResult = await pieceService.movePiece(connection, sessionId, teamId, pieceId, Number(spaces), selectedCard.card_name);
             actionDesc = `${waiting[0].full_name} moved a marble ${spaces} space(s).`;
         } else if (action === "discard") {
             actionDesc = `${waiting[0].full_name} discarded a card (no valid moves).`;
-        }
-
-        // Record the card as played in this deal (removes it from player's hand)
-        if (cardId || cardName) {
-            await cardService.recordCardPlayed(connection, sessionId, userId, cardId, cardName);
         }
 
         // Check win condition (all 8 pieces in Safe zone)

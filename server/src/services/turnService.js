@@ -126,7 +126,8 @@ async function advanceTurn(connection, sessionId, userId, actionSummary = "") {
         roundComplete = true;
         const newOrder = await createRound(connection, sessionId, roundNumber + 1);
         next = newOrder[0];
-        lastActionText = `Round ${roundNumber} complete. Round ${roundNumber + 1} starts: ${next.full_name} plays first.`;
+        lastActionText = (actionSummary ? `${actionSummary} ` : "") +
+            `Round ${roundNumber} complete. Round ${roundNumber + 1} starts: ${next.full_name} plays first.`;
     }
 
     const [[nextTeam]] = await connection.execute(
@@ -154,9 +155,11 @@ async function advanceTurn(connection, sessionId, userId, actionSummary = "") {
         }
     }
 
+    delete stateMeta.active_card;
     await connection.execute(
         `UPDATE game_state
-         SET current_team_id = ?, turn_number = turn_number + 1, last_action = ?
+         SET current_team_id = ?, turn_number = turn_number + 1, last_action = ?,
+             turn_started_at = NOW()
          WHERE session_id = ?`,
         [nextTeam.team_id, JSON.stringify(stateMeta), sessionId]
     );
@@ -168,4 +171,20 @@ async function advanceTurn(connection, sessionId, userId, actionSummary = "") {
     };
 }
 
-module.exports = { createRound, startGame, advanceTurn };
+// All turn mutations take this same lock before checking the owner/deadline.
+// The deadline lives in the database, so refreshes and server restarts cannot reset it.
+async function expireTurn(connection, sessionId) {
+    const [states] = await connection.execute(
+        `SELECT gs.status, st.turn_started_at <= NOW() - INTERVAL 60 SECOND AS expired
+         FROM game_state st
+         JOIN game_sessions gs ON gs.session_id = st.session_id
+         WHERE st.session_id = ? FOR UPDATE`,
+        [sessionId]
+    );
+    if (!states[0] || states[0].status !== "active" || !states[0].expired) return false;
+
+    await advanceTurn(connection, sessionId, null, "Time is up (60 seconds).");
+    return true;
+}
+
+module.exports = { createRound, startGame, advanceTurn, expireTurn };
