@@ -1,6 +1,5 @@
 const pool = require("../config/database");
 
-// Card faces that exist in client/public/images/cards
 const CARD_FACES = new Set(["ace", "king", "jack", "joker", "10", "4", "5", "7"]);
 
 function cardImage(cardName) {
@@ -11,8 +10,6 @@ function cardImage(cardName) {
         : "/images/cards/card-back.svg";
 }
 
-// The cards students can use. The qr_token is NEVER included: it is the secret
-// that proves a student really holds the printed card.
 async function getActiveCards() {
     const [rows] = await pool.execute(
         `SELECT card_id, card_name, card_effect, difficulty

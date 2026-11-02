@@ -206,11 +206,217 @@ The four strong cards ask questions about Python functions: 
 |F6|Start and finish a session|Lecturer|Changes the session status and saves the start and end time|
 |F7|Random turn order|System|Shuffles all players each round and tracks the current turn|
 |F8|End turn|Current player, lecturer|Moves to the next player or starts a new round|
-|F9|Scan a card|Student|Reads the QR code with the camera, or accepts a typed code|
+|F9|Scan a physical card|Student|Uses the game website camera to read a rank-only QR token; no typed code or mobile pairing is required|
 |F10|Question and timer|Student|Shows the question and four options with a 30-second countdown|
 |F11|Mark and score|System|Checks the answer on the server, saves the attempt and adds points|
 |F12|Result screen|Student|Shows correct or wrong, the explanation, the card move and the team score|
 |F13|Live scores|All|Team scores and the turn order update every 3 seconds|
-|F14|Card QR page|Lecturer|Makes the QR codes of all cards, ready to print|
+|F14|Card QR print guide|Lecturer|Provides 13 rank-only QR labels in the documentation, ready to print|
 |F15|Lecturer dashboard|Lecturer|Number of students, answers, accuracy, leading team, hardest question, top performer and recent activity|
 |F16|Sounds|Student|Sound effects with an on and off button|
+
+---
+
+# 6. Implementation
+
+## 6.1 Architecture and API integration
+
+Function Junction uses a browser client, a Node.js/Express server and a MariaDB database. Browser JavaScript sends JSON requests to Express routes. Controllers validate the request, services run parameterised SQL queries, and the response updates the Pug web interface without a full page reload.
+
+**Figure 6.1 – System architecture**  
+> Insert a diagram showing: Browser → Express routes/controllers/services → MariaDB.
+
+### Source-code screenshots for API integration
+
+| Screenshot | File and exact lines | What to explain in the report |
+|---|---|---|
+| API client helper | `client/public/js/common.js`, lines **3–21** | The Fetch API sends JSON, uses same-origin session credentials and returns `{ ok, status, data }`. |
+| Server setup | `server/src/server.js`, lines **8–51** | Express configuration, JSON parsing, static files, sessions and route registration. |
+| Game API routes | `server/src/routes/gameRoutes.js`, lines **1–39** | REST endpoints and route protection using `requireLogin` and `requireRole`. |
+| Card API flow | `server/src/controllers/cardController.js`, lines **5–43** | The server validates the current player before digital card selection or physical QR scanning. |
+
+**Suggested caption:** “REST API integration between the browser client, Express routes and protected game controllers.”
+
+Use this API table:
+
+| Method | Endpoint | Purpose | User / protection |
+|---|---|---|---|
+| `POST` | `/api/sessions` | Creates a session and saves the selected card mode | Lecturer |
+| `POST` | `/api/sessions/:sessionId/join` | Joins a team in a waiting session | Student |
+| `POST` | `/api/game/sessions/:sessionId/cards/select` | Selects a digital card | Current student player |
+| `POST` | `/api/game/sessions/:sessionId/cards/scan` | Accepts a rank-only QR token scanned by the website camera | Current student player, physical mode |
+| `POST` | `/api/game/answers` | Marks and saves a desktop answer | Current student player |
+| `GET` | `/api/game/sessions/:sessionId/turn` | Reads the current player, order and remaining time | Session member or owner lecturer |
+| `POST` | `/api/game/sessions/:sessionId/pieces/move` | Moves, enters, swaps or discards a marble | Current student player |
+| `GET` | `/api/game/sessions/:sessionId/summary` | Reads lecturer analytics | Owner lecturer |
+
+## 6.2 Database management and CRUD operations
+
+The project uses `mysql2/promise`, a connection pool and SQL placeholders (`?`). SQL placeholders prevent user input being joined directly into SQL statements.
+
+**Code screenshot:** `server/src/config/database.js`, lines **1–23**.  
+**Caption:** “MariaDB connection-pool configuration using mysql2/promise.”
+
+### Create (C)
+
+A lecturer creates a game session. The server inserts the session, creates Team 1 and Team 2, stores the digital/physical card mode and commits the transaction.
+
+**Code screenshot:** `server/src/controllers/sessionController.js`, lines **41–80**.  
+**Caption:** “Create operation: session, teams and card mode are saved in one transaction.”
+
+Answer submission creates an `attempts` record. A correct answer additionally creates a `score_event` record and updates the score of the team.
+
+**Code screenshot:** `server/src/controllers/gameController.js`, lines **183–209**.  
+**Caption:** “Create operations for answer attempts and score-event history, plus score update.”
+
+### Read (R)
+
+The dashboard reads team scores, answers, accuracy, hardest questions, recent activity and top performers.
+
+**Code screenshot:** `server/src/services/dashboardService.js`, lines **17–75**.  
+**Caption:** “Read operations used to generate lecturer dashboard statistics.”
+
+### Update (U)
+
+The system updates marble positions, team scores, selected-card state, game state and player turns. Before updating, it checks the active player, selected card, answer result and legal movement.
+
+**Code screenshot:** `server/src/controllers/pieceController.js`, lines **108–145**.  
+**Caption:** “Update operation: validate the move, update digital marbles, check the winner and advance the turn.”
+
+**Code screenshot:** `server/src/services/cardService.js`, lines **205–223**.  
+**Caption:** “Update operation: save selected-card metadata safely in game state.”
+
+### Delete (D)
+
+There is deliberately no public delete feature for attempts, scores or completed games. These records are assessment evidence for lecturers and deleting them would make dashboard statistics inaccurate. Instead, the system uses controlled updates: a used card is removed/recorded, a marble position changes, and a session status changes from `waiting` to `active` to `finished`. A future lecturer-only administration feature could use soft deletion and an audit log.
+
+## 6.3 Transactions, validation and data integrity
+
+Answer submission starts a database transaction, locks the membership/game row, verifies the active player, checks the selected option, saves the answer and score, then commits. If a problem occurs, the transaction rolls back. This prevents partial saves and duplicate scoring.
+
+**Code screenshot:** `server/src/controllers/gameController.js`, lines **66–128** and **238–250**.  
+**Caption:** “Transaction, row locking, turn ownership validation and rollback during answer submission.”
+
+Each answer is associated with `round_turn_id`. The one-answer-per-turn constraint allows the same question to be repeated and scored in a later turn, but prevents two submissions in one turn.
+
+**Database screenshot:** `database/schema.sql`, lines **131–163**, and `database/add_per_turn_attempts.sql`, lines **1–38**.  
+**Caption:** “Attempts linked to round turns: repeated questions are allowed later, but duplicate submissions in the same turn are blocked.”
+
+## 6.4 Digital cards and physical QR-card feature
+
+The lecturer chooses the card mode when creating a session. Digital mode shows a five-card hand and opens questions directly. Physical mode uses real cards with 13 rank-only printable QR labels. The player presses **Scan card** inside the game website, allows this device’s camera and scans a label. The question appears on the same screen. The QR token contains no URL, IP address, suit, session or turn number.
+
+| Screenshot | File and exact lines | What to explain |
+|---|---|---|
+| Card-mode creation | `server/src/controllers/sessionController.js`, lines **41–79** | The lecturer chooses `digital` or `physical`; invalid values are rejected. |
+| Browser camera scanner | `client/public/js/card-scanner.js`, lines **1–61** | Local camera scanning, QR-token validation and permission/error messages. |
+| Camera game flow | `client/public/js/game.js`, lines **220–285** | Opening/stopping the scanner and submitting the scanned token to the server. |
+| Physical-card validation | `server/src/services/cardService.js`, lines **227–283** | Rank-only token lookup, current-turn check and a saved question for the turn. |
+| Printable labels | `docs/physical-card-qr-codes.md`, lines **1–46** | Shows the 13 rank-only labels, their tokens and printing/game instructions. |
+
+> Insert UI screenshots in this order:  
+> 1. Lecturer selects **Physical cards** when creating a session.  
+> 2. Physical-mode game screen with **Scan card** button.  
+> 3. Website camera panel scanning a printed rank QR label.  
+> 4. Question displayed on the same game screen.  
+> 5. Correct/wrong result and digital marble movement.  
+> 6. `docs/physical-card-qr-codes.html` print sheet with the 13 labels.
+
+## 6.5 Turn timer, turn order and game rules
+
+The server stores when each turn starts. A background timer checks active sessions and advances an expired turn after 60 seconds. Server-side timing cannot be bypassed by refreshing the browser.
+
+**Code screenshot:** `server/src/services/turnTimerService.js`, lines **1–43**.  
+**Caption:** “Background service that detects and advances expired 60-second turns.”
+
+**Code screenshot:** `server/src/services/turnService.js`, lines **92–169**.  
+**Caption:** “Turn advancement, new-round creation and reset of the next player’s clock.”
+
+**Code screenshot:** `server/src/controllers/turnController.js`, lines **77–98** and **133–188**.  
+**Caption:** “Turn-state API and protected manual turn handoff.”
+
+> Insert a game UI screenshot showing current player, round, turn number and the `01:00` countdown. Add a second screenshot after a timeout if possible.
+
+## 6.6 Authentication and security
+
+Security features implemented are password hashing with bcrypt, `httpOnly` session cookies, student/lecturer role checks, session ownership checks, turn ownership checks, parameterised SQL, server-side answer marking and rejection of arbitrary QR content.
+
+**Code screenshot:** `server/src/controllers/authController.js`, lines **70–141** and **146–230**.  
+**Caption:** “Secure registration and login using bcrypt hashing and regenerated sessions.”
+
+**Code screenshot:** `server/src/routes/gameRoutes.js`, lines **11–39**.  
+**Caption:** “Protected student and lecturer API routes.”
+
+**Code screenshot:** `server/src/controllers/gameController.js`, lines **158–185**.  
+**Caption:** “Server-side option validation and correct-answer calculation.”
+
+## 6.7 Testing
+
+Automated tests cover virtual-card removal, one answer per turn, repeated-rank scoring on a later turn, 60-second timeouts, concurrent requests, camera cancellation, invalid QR content and rank-only QR generation.
+
+**Screenshot:** terminal output after running `npm test`.  
+**Caption:** “Automated test results for Function Junction.”
+
+Add this manual testing table:
+
+| Test | Expected result | Evidence screenshot |
+|---|---|---|
+| Digital card selected | Card disappears from the five-card hand; question opens | Before/after card hand |
+| Physical QR scan | Website camera opens; question appears on same screen | Scanner and question |
+| Wrong answer | No points; one-space basic move only | Result screen |
+| Correct answer | Points and full card power | Result and board |
+| Timer expires | Server passes to next player | Two turn banners |
+| Repeated rank later | Same rank can be scanned and score again on another turn | Two results |
+
+---
+
+# 7. User Guidance
+
+## 7.1 Lecturer
+
+1. Sign in as a lecturer.
+2. Create a session and choose **Digital cards** or **Physical cards**.
+3. Share the six-character session code with students.
+4. Start the game when students have joined teams.
+5. In physical mode, print `docs/physical-card-qr-codes.html`, attach rank labels to real cards, shuffle and deal five cards per player.
+6. Monitor scores, answers, accuracy and difficult questions on the dashboard.
+7. Finish the session when the game ends.
+
+> Insert UI screenshots: lecturer create-session screen, waiting room, QR print sheet and dashboard.
+
+## 7.2 Student
+
+1. Sign in, enter the session code and choose a team.
+2. Wait for the lecturer to start the game.
+3. When it is your turn, use one card.
+4. In digital mode, select a displayed card.
+5. In physical mode, click **Scan card**, allow camera permission and hold the rank QR label in front of the camera.
+6. Answer before the 60-second turn expires.
+7. Select a highlighted marble to move, or discard where appropriate.
+
+> Insert UI screenshots: student join form, team choice, game board/current turn, digital cards, scanner, question, result and marble movement.
+
+## 7.3 Camera troubleshooting
+
+- Camera access requires `https://` or `http://localhost:3000`; ordinary HTTP network addresses are blocked by browsers.
+- Allow camera permission when the browser asks.
+- Close other applications using the webcam.
+- Print clear black-and-white labels with a white border.
+- Use **Start / retry camera** if scanning does not begin.
+
+---
+
+# 8. Conclusions and Future Work
+
+Function Junction provides an active way to practise Python functions through team play. The completed system includes accounts, session codes, team joining, digital marble movement, automatic marking, scoring, server-enforced 60-second turns, lecturer analytics, digital cards and physical cards with website-camera QR scanning.
+
+The main limitation is that rank-only physical QR labels do not prove which player owns a specific real card. The lecturer supervises the real card deal. Browser camera access also requires HTTPS or localhost.
+
+Future work could add:
+
+- Lecturer pages to create, edit and deactivate questions.
+- WebSockets for instant updates instead of three-second polling.
+- Permanent HTTPS deployment for classroom devices.
+- Lecturer-only archived-session deletion/anonymisation with an audit log.
+- More Python topics, accessibility settings and language options.
+- A complete game-replay page using turns, attempts, score events and marble positions.

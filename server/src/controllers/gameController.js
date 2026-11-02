@@ -527,4 +527,4 @@ async function getHand(req, res) {
     }
 }
 
-module.exports = { submitAnswer, getLeaderboard, getLatestAttempt, submitMobileAnswer, getHand };
+module.exports = { submitAnswer, getLeaderboard, getLatestAttempt,  getHand };

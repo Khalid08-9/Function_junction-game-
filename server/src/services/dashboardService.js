@@ -1,7 +1,5 @@
 const pool = require("../config/database");
 
-// Gathers all the lecturer-dashboard statistics for one session.
-// Used by /api/game/sessions/:sessionId/summary and by the dashboard page.
 async function getSummaryData(sessionId, lecturerId) {
     const [sessions] = await pool.execute(
         `SELECT session_id, session_code, status, started_at, ended_at

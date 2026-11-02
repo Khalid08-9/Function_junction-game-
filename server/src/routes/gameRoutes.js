@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const { requireLogin, requireRole } = require("../middleware/authMiddleware");
-const { submitAnswer, getLeaderboard, getLatestAttempt, submitMobileAnswer, getHand } = require("../controllers/gameController");
+const { submitAnswer, getLeaderboard, getLatestAttempt, getHand } = require("../controllers/gameController");
 const { getTurnState, endTurn } = require("../controllers/turnController");
 const { getSummary } = require("../controllers/dashboardController");
 const { getPieces, movePiece } = require("../controllers/pieceController");
@@ -15,9 +15,6 @@ router.post("/answers", requireLogin, requireRole("student"), submitAnswer);
 router.get("/sessions/:sessionId/hand", requireLogin, getHand);
 router.post("/sessions/:sessionId/cards/select", requireLogin, requireRole("student"), playCard);
 router.post("/sessions/:sessionId/cards/scan", requireLogin, requireRole("student"), scanCard);
-
-// Legacy authenticated answer endpoint; the website camera uses /answers.
-router.post("/mobile-answer", requireLogin, requireRole("student"), submitMobileAnswer);
 
 // Polling for latest submitted answer (used while QR is shown)
 router.get("/sessions/:sessionId/latest-attempt", getLatestAttempt);

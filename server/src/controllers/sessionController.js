@@ -62,7 +62,6 @@ async function createSession(req, res) {
                 );
 
                 await createDefaultTeams(connection, result.insertId);
-                // Store settings in existing metadata, avoiding a schema migration.
                 await connection.execute(
                     `INSERT INTO game_state (session_id, last_action) VALUES (?, ?)`,
                     [result.insertId, JSON.stringify({ card_mode: cardMode, text: "Waiting for players.", played_cards: {}, current_deal: 1 })]

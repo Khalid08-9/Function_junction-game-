@@ -8,14 +8,12 @@ const pool = require("./config/database");
 const app = express();
 const port = Number(process.env.PORT) || 3000;
 
-// Pug pages live in client/src/views, CSS and browser JavaScript in client/public
 app.set("view engine", "pug");
 app.set("views", path.join(__dirname, "../../client/src/views"));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, "../../client/public")));
-// Serve the decoder locally; camera scanning does not depend on a CDN or phone.
 app.get("/vendor/html5-qrcode.min.js", (req, res) => {
     res.sendFile(require.resolve("html5-qrcode/html5-qrcode.min.js"));
 });
