@@ -25,6 +25,9 @@ router.get("/play", requirePageLogin, requirePageRole("student"),
 // Lecturer
 router.get("/lecturer", requirePageLogin, requirePageRole("lecturer"),
     asyncHandler(pages.showLecturerHome));
+router.get("/lecturer/questions", requirePageLogin, requirePageRole("lecturer"), (req, res) => {
+    res.render("question-bank", { pageTitle: "Manage card questions" });
+});
 
 // Lecturer who owns the session, or a student in it
 router.get("/sessions/:sessionId", requirePageLogin,

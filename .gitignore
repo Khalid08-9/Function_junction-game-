@@ -47,3 +47,6 @@ Thumbs.db
 .cache/
 .parcel-cache/
 *.tsbuildinfo
+
+# Private database exports contain real names, emails and password hashes.
+backups/

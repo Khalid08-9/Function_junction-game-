@@ -299,7 +299,7 @@ Answer submission starts a database transaction, locks the membership/game row, 
 
 Each answer is associated with `round_turn_id`. The one-answer-per-turn constraint allows the same question to be repeated and scored in a later turn, but prevents two submissions in one turn.
 
-**Database screenshot:** `database/schema.sql`, lines **131–163**, and `database/add_per_turn_attempts.sql`, lines **1–38**.  
+**Database screenshot:** `database/schema.sql`, lines **131–164**. See `scripts/upgrade-database.js` for upgrading an existing database without deleting its data.
 **Caption:** “Attempts linked to round turns: repeated questions are allowed later, but duplicate submissions in the same turn are blocked.”
 
 ## 6.4 Digital cards and physical QR-card feature

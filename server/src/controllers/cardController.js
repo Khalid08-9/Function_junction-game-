@@ -1,6 +1,6 @@
 const pool = require("../config/database");
 const { expireTurn } = require("../services/turnService");
-const { selectCard, selectPhysicalCard, preparePhysicalQuestion, getPlayerHand } = require("../services/cardService");
+const { selectCard, selectPhysicalCard, prepareCardQuestion, getPlayerHand } = require("../services/cardService");
 
 async function selectPlayerCard(req, res, physical) {
     const sessionId = Number(req.params.sessionId);
@@ -28,13 +28,12 @@ async function selectPlayerCard(req, res, physical) {
             await connection.rollback();
             return res.status(403).json({ message: "Only the current player can select a card." });
         }
-        const active = physical
-            ? await selectPhysicalCard(connection, sessionId, userId, req.body.qr_token, req.body.turn_number)
-            : await selectCard(connection, sessionId, userId, req.body.card_id, req.body.card_key, req.body.turn_number);
-        if (physical) await preparePhysicalQuestion(connection, sessionId, userId);
+        if (physical) await selectPhysicalCard(connection, sessionId, userId, req.body.qr_token, req.body.turn_number);
+        else await selectCard(connection, sessionId, userId, req.body.card_id, req.body.card_key, req.body.turn_number);
+        await prepareCardQuestion(connection, sessionId, userId);
         const hand = await getPlayerHand(sessionId, userId, connection);
         await connection.commit();
-        return res.json({ ...hand, active_card: physical ? hand.active_card : active });
+        return res.json(hand);
     } catch (error) {
         if (connection) await connection.rollback();
         console.error("Select card failed:", error.code || error.message);

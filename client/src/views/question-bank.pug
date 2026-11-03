@@ -1,0 +1,52 @@
+extends layout
+
+block content
+  section.card
+    h1.title Manage card questions
+    p.subtitle Add or edit the Python quiz questions for each card. Changes are saved in the database and used by both game modes.
+    p.hint This is a shared lecturer question bank, including starter questions. Editing saves a new version and archives the previous one; past results and already-open questions are preserved.
+    p.hint Keep at least one active question for each active card so that it remains playable.
+    p.hint Delete permanently removes a question and its options. Questions used in game history or an open turn are protected; archive them instead.
+    a.btn.btn-small(href='/lecturer') Back to sessions
+    p#bank-message.message(role='alert', hidden)
+  section.card
+    h2#editor-title Add a question
+    form#question-editor
+      .field
+        label(for='question-card') Card
+        select#question-card(name='card_id', required)
+      .field
+        label(for='question-topic') Topic
+        input#question-topic(name='topic', maxlength='100', required)
+      .field
+        label(for='question-text') Question (include Python code on separate lines if needed)
+        textarea#question-text(name='question_text', rows='7', maxlength='6000', required)
+      fieldset
+        legend Four answer options — select exactly one correct answer
+        each label in ['A', 'B', 'C', 'D']
+          .field
+            label(for='option-' + label) Option #{label}
+            textarea(id='option-' + label, name='option_' + label, rows='2', maxlength='1000', required)
+            label
+              input(type='radio', name='correct', value=label, required)
+              |  #{label} is the correct answer
+      .field
+        label(for='question-explanation') Explanation (optional; shown after answering)
+        textarea#question-explanation(name='explanation', rows='3', maxlength='3000')
+      .button-row
+        button#save-question.btn(type='submit') Save question
+        button#cancel-edit.btn.btn-pink(type='button') Clear / cancel edit
+  section.card
+    h2 Question bank
+    .field
+      label(for='bank-filter') Filter by card
+      select#bank-filter
+        option(value='') All cards
+    label
+      input#show-archived(type='checkbox')
+      |  Show archived questions and earlier versions
+    p#bank-count.hint
+    #question-list
+
+block scripts
+  script(src='/js/question-bank.js')

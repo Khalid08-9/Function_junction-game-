@@ -4,6 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node server/src/server.js",
+    "dev": "node --watch server/src/server.js",
+    "db:backup": "node scripts/backup-database.js",
+    "db:upgrade": "node scripts/upgrade-database.js",
     "test": "node --test server/test/*.test.js",
     "generate:physical-qr": "node scripts/generate-physical-qr-codes.js"
   },

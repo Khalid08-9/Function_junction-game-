@@ -928,7 +928,6 @@
             showResult(selectedCardState.result);
             return;
         }
-
         // 1. Place card face in the center of the Jackaroo board (like physical game)
         const cardImg = { src: selectedCardState.image };
         if (cardImg && centerCardImg) {
@@ -938,6 +937,10 @@
         }
 
         // Digital cards open questions directly; QR labels belong to real cards only.
+        if (selectedCardState.question_data) {
+            beginQuestion(selectedCardState.question_data);
+            return;
+        }
         const result = await FJ.sendJson('GET', '/api/questions/by-card/' + cardId);
         if (!isMyCurrentTurn || selectedTurn !== lastTurnNumber) return;
         if (result.ok) beginQuestion(result.data);

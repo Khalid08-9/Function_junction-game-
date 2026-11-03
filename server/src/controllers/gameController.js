@@ -34,7 +34,7 @@ function answerFailure(res, error, fallback) {
         (error.code === "ER_DUP_ENTRY" && /uq_team_question/.test(error.sqlMessage || ""));
     return res.status(migrationMissing ? 503 : error.status || 500).json({
         message: migrationMissing
-            ? "Database update required: apply database/add_per_turn_attempts.sql, then restart the server."
+            ? "Database update required: back up first, then run npm run db:upgrade with a database administrator account."
             : error.status ? error.message : fallback
     });
 }
@@ -160,7 +160,7 @@ async function submitAnswer(req, res) {
             `SELECT o.is_correct
              FROM question_options o
              JOIN questions q ON q.question_id = o.question_id
-             WHERE o.option_id = ? AND o.question_id = ? AND q.is_active = 1`,
+              WHERE o.option_id = ? AND o.question_id = ?`,
             [optionId, questionId]
         );
 

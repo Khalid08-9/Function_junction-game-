@@ -224,9 +224,7 @@ async function selectCard(connection, sessionId, userId, cardId, cardKey, turnNu
     return meta.active_card;
 }
 
-// Real cards are dealt by the lecturer, not by the deterministic digital deck.
-// Rank-only labels can be scanned again on later turns. The unique play key is
-// the server's turn number, not a suit or a reusable printed token.
+
 async function selectPhysicalCard(connection, sessionId, userId, qrToken, turnNumber) {
     const { state, meta } = await loadCardState(connection, sessionId);
     if (meta.card_mode !== "physical") throw cardError("This game uses digital cards. Select a card on screen.");
@@ -259,8 +257,9 @@ async function selectPhysicalCard(connection, sessionId, userId, qrToken, turnNu
     return meta.active_card;
 }
 
-// Bind one question to the physical play so retries/reloads cannot reroll it.
-async function preparePhysicalQuestion(connection, sessionId, userId) {
+// Bind a question revision to the play. Lecturer edits affect future selections,
+// not an already-open question or its original options/correct answer.
+async function prepareCardQuestion(connection, sessionId, userId) {
     const { state, meta } = await loadCardState(connection, sessionId);
     const active = meta.active_card;
     if (!active || active.user_id !== userId || active.turn_number !== state.turn_number) throw cardError("Scan a card on your turn first.");
@@ -292,9 +291,10 @@ async function assertCardAnswerAllowed(connection, sessionId, userId, questionId
     if (active.result) throw cardError("You have already answered for this turn.");
     if (active.question_id && active.question_id !== Number(questionId)) throw cardError("Answer the question shown for this turn.");
     const [[question]] = await connection.execute(
-        `SELECT card_id FROM questions WHERE question_id = ? AND is_active = 1`, [questionId]
+        `SELECT card_id, is_active FROM questions WHERE question_id = ?`, [questionId]
     );
     if (!question || question.card_id !== active.card_id) throw cardError("This question does not match your selected card.");
+    if (!question.is_active && active.question_id !== Number(questionId)) throw cardError("This question is no longer active. Select an active question.");
     return meta;
 }
 
@@ -351,7 +351,7 @@ module.exports = {
     recordCardPlayed,
     selectCard,
     selectPhysicalCard,
-    preparePhysicalQuestion,
+    prepareCardQuestion,
     saveCardAnswer,
     assertCardAnswerAllowed,
     validateCardMove,
