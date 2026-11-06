@@ -29,10 +29,79 @@ Linux/macOS: `cp .env.example .env`
 
 Windows PowerShell: `Copy-Item .env.example .env`
 
+If `.env` already exists, edit it instead of overwriting it. The example contains
+placeholders only; it does not include anyone's private credentials.
+
 Edit the new `.env` with the database credentials created below. Choose your own
 `SESSION_SECRET` and `LECTURER_INVITE_CODE`. Do not use or share the author's
 machine-specific `.env`. A database login is **different from** a game website
 login: `DB_USER`/`DB_PASSWORD` are MariaDB credentials, not a student's email/password.
+
+### Windows setup (PowerShell)
+
+1. Install Node.js **22 LTS or newer** and MariaDB **10.11 or newer** using their
+   Windows installers. In the MariaDB installer, install it as a Windows service,
+   enable TCP networking (normally port **3306**), and choose a root password.
+   Keep that password private; it is used to create the app's database user.
+2. Open **Services** (`Win + R`, then `services.msc`). Find your MariaDB service
+   (its name depends on the installer), start it, and set its startup type to
+   **Automatic** if you want it to start with Windows.
+3. Open PowerShell in the project folder and run:
+
+   ```powershell
+   node --version
+   npm.cmd --version
+   npm.cmd ci
+   Copy-Item .env.example .env
+   notepad .env
+   ```
+
+   Copy the example only if you do not already have `.env`. Using `npm.cmd`
+   avoids PowerShell's possible `npm.ps1` execution-policy error without
+   changing your system security settings.
+4. In `.env`, use `DB_HOST=127.0.0.1`, `DB_PORT=3306`,
+   `DB_NAME=function_junction`, and `DB_USER=junction_app`. Choose `DB_PASSWORD`
+   and use the **same password** in the `CREATE USER` command in section 3.
+   Replace `SESSION_SECRET` and `LECTURER_INVITE_CODE` with your own private
+   values. Leave `DB_SOCKET` commented out; a Linux socket path will not work
+   on Windows. Generate a session secret with:
+
+   ```powershell
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+5. From the project folder, open the SQL client:
+
+   ```powershell
+   mariadb -u root -p
+   ```
+
+   If `mariadb` is not recognised, use the installed executable's full path
+   (adjust the version/path to match your installation):
+
+   ```powershell
+   & "C:\Program Files\MariaDB 11.4\bin\mariadb.exe" -u root -p
+   ```
+
+   The `&` is required to run a quoted executable path in PowerShell. Enter the
+   root password when prompted, then run the SQL commands in section 3 below.
+   Run `SOURCE` **inside the MariaDB prompt**, not in PowerShell. If the relative
+   file paths cannot be found, use forward-slash absolute paths such as
+   `SOURCE C:/projects/function-junction/database/schema.sql;` (use a project
+   path without spaces, or import with a database GUI).
+6. After importing the database and creating its user, exit the SQL client and run:
+
+   ```powershell
+   npm.cmd start
+   ```
+
+   Open **http://localhost:3000**, then follow section 4 to create your lecturer
+   account. Stop the server with `Ctrl + C` before restarting after `.env` edits.
+
+Each laptop needs its own running MariaDB server and database setup. Copying the
+project does **not** copy database records or MariaDB users. To move existing
+questions, accounts and game history, use the private backup/restore instructions
+in section 7 instead of importing the fresh starter database.
 
 ## 3. Fresh database: import exactly two files
 
@@ -256,6 +325,8 @@ both `schema.sql` and `seed.sql` there before integration testing.
 | Unknown `round_turn_id` / timer column | Back up and run the administrator upgrade for an older database. |
 | Lecturer registration disabled | Set a private `LECTURER_INVITE_CODE` in `.env` and restart Node. |
 | `SOURCE` cannot find a file | Run the SQL client from the project root or use the file's full path; a GUI can import it instead. |
+| Windows: `mariadb` is not recognised | Use the full path to `mariadb.exe` shown in the Windows setup, or add its `bin` folder to PATH and reopen PowerShell. |
+| Windows: `npm.ps1` cannot be loaded | Use `npm.cmd ci` / `npm.cmd start` instead; no execution-policy change is needed. |
 | Port 3000 in use | Stop the other server or change `PORT` and open the matching localhost address. |
 | Camera unavailable | Use localhost/HTTPS, allow permission and close other webcam apps; try digital mode. |
 
