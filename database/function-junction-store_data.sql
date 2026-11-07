@@ -1,6 +1,4 @@
--- PRIVATE full database backup: contains personal data and password hashes.
--- Restore ONLY into a new empty database. Do not import seed.sql as well.
--- Created: 2026-11-02T13:52:01.473Z
+
 SET NAMES utf8mb4;
 SET @OLD_SQL_MODE=@@SQL_MODE;
 SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';

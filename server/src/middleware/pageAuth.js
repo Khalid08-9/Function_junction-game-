@@ -22,7 +22,6 @@ function requirePageRole(role) {
     };
 }
 
-// For /login and /register: a logged-in user goes to their own home page
 function redirectIfLoggedIn(req, res, next) {
     if (req.session && req.session.user) {
         return res.redirect(homeFor(req.session.user));
